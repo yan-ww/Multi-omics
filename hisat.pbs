@@ -29,14 +29,10 @@ for file in $(ls ${datadir}/*.fastq.gz);do
 		-1 ${id}R1.fastq.gz \
 		-2 ${id}R2.fastq.gz \
 		-S ${outdir}/sam/${id}.sam \
-		2 > $logfile
+		2 >> $logfile
 	$samtools view -bS ${outdir}/sam/${id}.sam > ${outdir}/sam/${id}.bam
 	$samtools sort -@ 1 ${outdir}/sam/${id}.bam -o ${outdir}/bam/${id}.sorted.bam
-	$samtools index -@ 1 ${outdir}/bam/${id}.sorted.bam
-done
-
-
-		
+	$samtools index -@ 1 ${outdir}/bam/${id}.sorted.bam		
 	echo "------------end---------------" >>${logfile}
 done
 
