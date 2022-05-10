@@ -1,0 +1,49 @@
+#! /bin/bash
+#PBS -N RNA_fastqc
+#PBS -o /public/home/fudan_bio/anyu/tem/RNA_fastqc.log
+#PBS -j oe
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=24:00:00
+#PBS -q default
+
+#软件路径
+trim=/public/home/fudan_bio/anyu/miniconda3/envs/rnaseq/bin/trim_galore
+
+#工作路径及变量（每次需更改）
+workdir=/public/home/fudan_bio/anyu/RNA_seq
+logfile=${workdir}/log/trim_galore.log
+datadir=/public/group_share_data/fudan_bio/anyu_lab/HuPI-Epilepsy/brainRNAseq/FASTQ/Sample_R20038555-pool1-EP01F
+outdir=${workdir}/result/clean
+
+
+for f1 in $(ls ${datadir}/*R1.fastq.gz);do
+	f2=${f1%%R1.fastq.gz}"R2.fastq.gz"
+	logtime=$(date "+%Y-%m-%d %H:%M:%S")
+	echo "------------------------------" >> $logfile
+	echo "FILENAME: ${f1%%R1.fastq.gz}" >> $logfile
+	echo "LOG TIME: $logtime" >> $logfile
+	echo "------------------------------" >> $logfile
+	${trim} -q 25 --phred33 --length 36 -e 0.1 --stringency 3 --paired -o ${outdir} $f1 $f2
+	echo "" >>${logfile}
+done
+
+
+#方法二（并行处理）
+#ls ${datadir}|grep "R1.fastq.gz" > fq1
+#ls ${datadir}|grep "R2.fastq.gz" > fq2
+#paste fq1 fq2 > config
+#cat config | while read id;do
+#	arr=(${id})
+#	f1=${arr[0]}
+#	f2=${arr[1]}
+#	${trim} -q 25 --phred33 --length 36 -e 0.1 --stringency 3 --paired -o ${outdir} $f1 $f2
+#done
+
+
+
+
+	
+
+
+
+
