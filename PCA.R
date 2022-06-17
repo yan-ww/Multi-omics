@@ -5,11 +5,12 @@ library(FactoMineR)
 library(vegan)
 
 count<-read.csv("DEgenecount.csv",header=T,row.names=1)
-summary(is.numeric(count[,1]))
+datacount<-count
+summary(is.numeric(datacount[,1]))
 group<-read.csv("group.CSV")
 condition<-group$GROUP
-coldata<-data.frame(row.names=colnames(count),condition)
-dds <- DESeqDataSetFromMatrix(count, coldata, design = ~condition)
+coldata<-data.frame(row.names=colnames(datacount),condition)
+dds <- DESeqDataSetFromMatrix(count, datacoldata, design = ~condition)
 dds <- DESeq(dds) 
 vsd<-varianceStabilizingTransformation(dds,blind = FALSE)
 #这里是用DEseq的标准化方法，也可以直接用fpkm
