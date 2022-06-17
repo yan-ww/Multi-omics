@@ -4,13 +4,12 @@ library(factoextra)
 library(FactoMineR)
 library(vegan)
 
-DEgenecount<-read.csv("DEgenecount.csv")
-rownames(DEgenecount)<-DEgenecount[,1]
-DEgenecount<-DEgenecount[,-1]
+count<-read.csv("DEgenecount.csv",header=T,row.names=1)
+summary(is.numeric(count[,1]))
 group<-read.csv("group.CSV")
 condition<-group$GROUP
-coldata<-data.frame(row.names=colnames(DEgenecount),condition)
-dds <- DESeqDataSetFromMatrix(DEgenecount, coldata, design = ~condition)
+coldata<-data.frame(row.names=colnames(count),condition)
+dds <- DESeqDataSetFromMatrix(count, coldata, design = ~condition)
 dds <- DESeq(dds) 
 vsd<-varianceStabilizingTransformation(dds,blind = FALSE)
 #这里是用DEseq的标准化方法，也可以直接用fpkm
@@ -22,8 +21,9 @@ fviz_pca_ind(pca, geom.ind  = c("point","text"),
             pointsize = 1.5, pointshape = 16,
             addEllipses = T, 
             repel = F ,
-            legend.title = "Tissue"
-)
+            legend.title = "Tissue",
+            title="youth vs adults"
+)+theme(plot.title = element_text(hjust = 0.5))
 
 
 
