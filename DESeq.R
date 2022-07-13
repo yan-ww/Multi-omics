@@ -2,12 +2,10 @@ setwd("E:/BIO/EP/analysis/")
 library(DESeq2)
 library(ggplot2)
 
-count<-read.csv("count-FvN.csv")
-rownames(count)=count[,1]
-count<- count[,-1]
-group<-read.csv("group-all.CSV")
-condition<-group$GROUP
-people<-group$PEOPLE
+count<-read.csv("count-FvN.csv",row.names=1)
+b<-colnames(count)
+condition<-substring(b,nchar(b))
+people<-substr(b,3,nchar(b)-1)
 coldata<-data.frame(row.names=colnames(count),condition,people)  
 dds <- DESeqDataSetFromMatrix(DEgenecount, coldata, design = ~people+condition)
 dds <- DESeq(dds) 
