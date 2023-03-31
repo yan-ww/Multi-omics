@@ -15,10 +15,15 @@ dds <- DESeqDataSetFromMatrix(DEgenecount, coldata, design = ~condition)
 dds <- DESeq(dds) 
 vsd<-varianceStabilizingTransformation(dds,blind = FALSE)
 vstmat<-assay(vsd)
-pheatmap(vstmat,show_rownames = FALSE,scale = "row")#画图
+vstp<-t(scale(t(vstmat)))
+table(abs(vstp)>2)
+vstp[vstp>=2]=2
+vstp[vstp<=-2]=-2
+pheatmap(vstp,show_rownames = F,annotation_col = coldata)
 
 
-方法二：vegen包的标准化函数
+
+#方法二：vegen包的标准化函数
 library(vegan)
 d<-decostand(DE,"standardize",MARGIN = 1)#画图
 pheatmap(vstmat,show_rownames = FALSE,show_colnames = FALSE)
