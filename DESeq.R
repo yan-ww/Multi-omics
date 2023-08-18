@@ -1,4 +1,3 @@
-setwd("E:/BIO/EP/analysis/")
 library(DESeq2)
 library(ggplot2)
 
