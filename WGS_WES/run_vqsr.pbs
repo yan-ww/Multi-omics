@@ -1,0 +1,69 @@
+#!/bin/bash
+
+#PBS -N run_vqsr
+#PBS -j oe
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=24:00:00
+#PBS -q default
+
+# 软件执行路径
+gatk=$HOME/software/anaconda/anaconda3/envs/wes-analysis/bin/gatk
+
+# 工作路径
+workdir=$HOME/ASD_prof.AN
+outdir=${workdir}/results/20201215
+gatk_bundle=$HOME/ASD_prof.AN/data/gatk_bundle
+
+# 批量执行变量: $vcfgroup
+
+# 其他变量
+refgenome=$HOME/ASD_prof.AN/data/reference_genome/gatk-hg19/ucsc.hg19.fa
+
+# 程序执行时间及日志
+logtime=$(date "+%Y-%m-%d %H:%M:%S")
+logfile=${workdir}/logs/20201215/run_vqsr_${vcfgroup}.log
+echo "------------------------------" >> $logfile
+echo "LOG TIME: $logtime" >> $logfile
+echo "------------------------------" >> $logfile
+
+## 执行内容
+# SNP mode
+$gatk VariantRecalibrator -R $refgenome -V ${outdir}/vcf_output/${vcfgroup}_raw.vcf.gz \
+    -resource:hapmap,known=false,training=true,truth=true,prior=15.0 ${gatk_bundle}/hg19/hapmap_3.3.hg19.vcf \
+    -resource:omini,known=false,training=true,truth=true,prior=12.0 ${gatk_bundle}/hg19/1000G_omni2.5.hg19.vcf \
+    -resource:1000G,known=false,training=true,truth=false,prior=10.0 ${gatk_bundle}/hg19/1000G_phase1.snps.high_confidence.hg19.vcf \
+    -resource:dbsnp,known=true,training=false,truth=false,prior=2.0 ${gatk_bundle}/hg19/dbsnp_138.hg19.vcf \
+    -an DP -an QD -an FS -an SOR -an ReadPosRankSum -an MQRankSum \
+    -mode SNP -tranche 100.0 -tranche 99.9 -tranche 99.0 -tranche 95.0 -tranche 90.0 \
+    -rscript-file ${outdir}/gatk_output/${vcfgroup}_snpsPlots.R \
+    --tranches-file ${outdir}/gatk_output/${vcfgroup}_snps.tranches \
+    -O ${outdir}/gatk_output/${vcfgroup}_snps.recal 2>>$logfile
+$gatk ApplyVQSR -R $refgenome -V ${outdir}/vcf_output/${vcfgroup}_raw.vcf.gz \
+    -ts-filter-level 99.0 \
+    --tranches-file ${outdir}/gatk_output/${vcfgroup}_snps.tranches \
+    --recal-file ${outdir}/gatk_output/${vcfgroup}_snps.recal \
+    -mode SNP \
+    -O ${outdir}/gatk_output/${vcfgroup}_snps.VQSR.vcf.gz 2>>$logfile
+
+# INDEL mode
+$gatk VariantRecalibrator -R $refgenome -V ${outdir}/gatk_output/${vcfgroup}_snps.VQSR.vcf.gz \
+    -resource:mills,known=true,training=true,truth=true,prior=12.0 ${gatk_bundle}/hg19/Mills_and_1000G_gold_standard.indels.hg19.vcf \
+    -an DP -an QD -an FS -an SOR -an ReadPosRankSum -an MQRankSum \
+    -mode INDEL --max-gaussians 6 \
+    -rscript-file ${outdir}/gatk_output/${vcfgroup}_snpsIndelsPlots.R \
+    --tranches-file ${outdir}/gatk_output/${vcfgroup}_snps.indels.tranches \
+    -O ${outdir}/gatk_output/${vcfgroup}_snps.indels.recal 2>>$logfile
+$gatk ApplyVQSR -R $refgenome -V ${outdir}/gatk_output/${vcfgroup}_snps.VQSR.vcf.gz \
+    -ts-filter-level 99.0 \
+    --tranches-file ${outdir}/gatk_output/${vcfgroup}_snps.indels.tranches \
+    --recal-file ${outdir}/gatk_output/${vcfgroup}_snps.indels.recal \
+    -mode INDEL \
+    -O ${outdir}/vcf_output/${vcfgroup}_VQSR.vcf.gz 2>>$logfile
+rm ${outdir}/vcf_output/${vcfgroup}_raw.vcf.gz 2>>$logfile
+rm ${outdir}/vcf_output/${vcfgroup}_raw.vcf.gz.tbi 2>>$logfile
+rm ${outdir}/gatk_output/${vcfgroup}_snps.VQSR.vcf.gz 2>>$logfile
+
+# 执行日志结束
+echo "" >> $logfile
+
+# END

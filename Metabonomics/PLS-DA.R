@@ -1,4 +1,3 @@
-setwd("D:/")
 library(mixOmics)
 library("DESeq2")
 count<-read.csv("count.csv",header = T,row.names = 1)
@@ -16,6 +15,6 @@ pls_ana <- plsda(t(vstmat),condition,ncomp = 2)
 plotIndiv(pls_ana,comp = c(1,2),group = condition,ind.names = F, 
           ellipse = T, legend = TRUE,style = 'ggplot2',pch =16,
           cex =5,title="FCD3",guide="none")
-ggsave("temporalFCD1_scaled.png")
+ggsave("temporal_scaled.png")
 dev.off()
 rm(list=ls())

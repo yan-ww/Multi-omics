@@ -1,0 +1,32 @@
+#!/bin/bash
+
+#PBS -N run_trimmomatic
+#PBS -l nodes=1:ppn=10
+#PBS -l walltime=8:00:00
+#PBS -q default
+
+# 软件执行路径
+trimmomatic=$HOME/miniconda3/envs/wes-analysis/bin/trimmomatic
+
+# 工作路径
+workdir=$HOME/tem
+adapter_dir=$HOME/data/adapters
+
+# 批量执行的文件参数: $sample
+
+# 执行内容
+#12行输入，后4行输出，\表示让计算机识别语句为同一行命令
+$trimmomatic PE -threads 10 -phred33 \
+    ${workdir}/fastq_ASD/Sample_${sample}/${sample}_combined_R1.fastq.gz \
+    ${workdir}/fastq_ASD/Sample_${sample}/${sample}_combined_R2.fastq.gz \
+    ${workdir}/results/trimmomatic_output/pairedReads/${sample}_R1_paired.fq.gz \
+    ${workdir}/results/trimmomatic_output/unpairedReads/${sample}_R1_unpaired.fq.gz \
+    ${workdir}/results/trimmomatic_output/pairedReads/${sample}_R2_paired.fq.gz \
+    ${workdir}/results/trimmomatic_output/unpairedReads/${sample}_R2_unpaired.fq.gz \
+    ILLUMINACLIP:${adapter_dir}/TruSeq3-PE-2.fa:2:30:10:8:True \
+    SLIDINGWINDOW:5:15 \
+    LEADING:5 \
+    TRAILING:5 \
+    MINLEN:50
+
+# END

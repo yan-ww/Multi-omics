@@ -1,0 +1,25 @@
+#!/bin/bash
+
+#PBS -N run_multiqc-1st
+#PBS -j oe
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=24:00:00
+#PBS -q default
+
+# 软件执行路径
+multiqc=$HOME/miniconda3/envs/wes-analysis/bin/multiqc
+
+# 程序执行时间及日志
+logtime=$(date "+%Y-%m-%d %H:%M:%S")
+logfile=$HOME/tem/logs/run_multiqc-1st_total.log
+echo "------------------------------" >> $logfile
+echo "LOG TIME: $logtime" >> $logfile
+echo "------------------------------" >> $logfile
+
+# 执行内容
+$multiqc $HOME/tem/results/ -o $HOME/tem/results/multiqc_output/ -n multiqcReport_fastqc
+
+# 执行日志结束
+echo "" >> $logfile
+
+# END

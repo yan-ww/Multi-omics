@@ -1,0 +1,36 @@
+#!/bin/bash
+
+#PBS -N run_gvcf
+#PBS -j oe
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=24:00:00
+#PBS -q default
+
+# 软件执行路径
+gatk=$HOME/software/anaconda/anaconda3/envs/wes-analysis/bin/gatk
+
+# 工作路径
+workdir=$HOME/ASD_prof.AN
+outdir=${workdir}/results/20201215
+
+# 批量执行变量: $sample
+
+# 其他变量
+refgenome=$HOME/ASD_prof.AN/data/reference_genome/gatk-hg19/ucsc.hg19.fa
+
+# 程序执行时间及日志
+logtime=$(date "+%Y-%m-%d %H:%M:%S")
+logfile=${workdir}/logs/20201215/run_gvcf_${sample}.log
+echo "------------------------------" >> $logfile
+echo "LOG TIME: $logtime" >> $logfile
+echo "------------------------------" >> $logfile
+
+## 执行内容
+$gatk HaplotypeCaller --emit-ref-confidence GVCF -R $refgenome \
+    -I ${outdir}/bam_output/${sample}_sorted.markdup.BQSR.bam \
+    -O ${outdir}/gvcf_output/${sample}_g.vcf.gz 2>>$logfile
+
+# 执行日志结束
+echo "" >> $logfile
+
+# END

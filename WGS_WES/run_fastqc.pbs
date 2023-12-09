@@ -1,0 +1,31 @@
+#!/bin/bash
+
+#PBS -N run_fastqc
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=24:00:00
+#PBS -q default
+
+# 软件执行路径
+fastqc=/public/home/anyu_lab/anyu/miniconda3/envs/wes-analysis/bin/fastqc
+
+# 工作路径
+workdir=$HOME/tem
+
+# 批量执行的文件参数: $filename
+temp1=${filename##*/}
+sample=${temp1%_*}
+
+# 程序执行时间及日志
+logtime=$(date "+%Y-%m-%d %H:%M:%S")
+logfile=${workdir}/logs/run_fastqc2nd_${sample}.log
+echo "------------------------------" >> $logfile
+echo "LOG TIME: $logtime" >> $logfile
+echo "------------------------------" >> $logfile
+
+# 执行内容
+$fastqc $filename -o ${workdir}/results/trimmomatic_output/pairedReads 2>>$logfile
+
+# 执行日志结束
+echo "" >> $logfile
+
+# END

@@ -1,0 +1,34 @@
+#!/bin/bash
+
+#PBS -N run_qualimap
+#PBS -j oe
+#PBS -l nodes=1:ppn=8
+#PBS -l walltime=24:00:00
+#PBS -q default
+
+# 软件执行路径
+qualimap=$HOME/software/anaconda/anaconda3/envs/wes-analysis/bin/qualimap
+
+# 工作路径
+workdir=$HOME/ASD_prof.AN
+outdir=${workdir}/results/20201215
+
+# 批量执行的文件参数: $sample
+
+# 其他参数
+wesregion=${workdir}/data/wholeExonBed/Agilent_SureSelect_Human_allExon_V5_hg19/realCoverBed6.bed
+
+# 程序执行时间及日志
+logtime=$(date "+%Y-%m-%d %H:%M:%S")
+logfile=${workdir}/logs/20201215/run_qualimap_${sample}.log
+echo "------------------------------" >> $logfile
+echo "LOG TIME: $logtime" >> $logfile
+echo "------------------------------" >> $logfile
+
+# 执行内容
+$qualimap bamqc -bam ${outdir}/bam_output/${sample}_sorted.markdup.BQSR.bam -c -gd HUMAN -gff $wesregion -nt 8 -outdir ${outdir}/qualimap_output/${sample} -sd 2>>$logfile
+
+# 执行日志结束
+echo "" >> $logfile
+
+# END

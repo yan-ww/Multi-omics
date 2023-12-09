@@ -1,0 +1,29 @@
+#!/bin/bash
+
+#PBS -N run_multiqc-2nd
+#PBS -j oe
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=24:00:00
+#PBS -q default
+
+# 软件执行路径
+multiqc=$HOME/software/anaconda/anaconda3/envs/wes-analysis/bin/multiqc
+
+# 工作路径
+workdir=$HOME/ASD_prof.AN
+outdir=${workdir}/results/20201215
+
+# 程序执行时间及日志
+logtime=$(date "+%Y-%m-%d %H:%M:%S")
+logfile=${workdir}/logs/20201215/run_multiqc-2nd_total.log
+echo "------------------------------" >> $logfile
+echo "LOG TIME: $logtime" >> $logfile
+echo "------------------------------" >> $logfile
+
+# 执行内容
+$multiqc ${outdir}/fastqc_output/*_paired_* -o ${outdir}/multiqc_output/ -n multiqcReport_fastq_ASD_CHFudan_trimmed 2>>$logfile
+
+# 执行日志结束
+echo "" >> $logfile
+
+# END
