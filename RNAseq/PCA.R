@@ -27,4 +27,18 @@ fviz_pca_ind(pca, geom.ind  = c("point","text"),
 theme(plot.title = element_text(hjust = 0.5))
 
 
-
+###PCA三维图画法
+#在pca分析完得到pca文件之后：
+F_color<-rep("red",count(condition=="F"))
+names(F_color)<-rownames(coldata)[which(coldata$condition=="F")]
+N_color<-rep("blue",count(condition=="N"))
+names(N_color)<-rownames(coldata)[which(coldata$condition=="N")]
+groups<-c(F_color,N_color)
+plot3d(pca$ind$coord[,1:3], # 取前三个主成分
+       xlab="Comp.1", ylab="Comp.2", zlab="Comp.3", 
+       col=groups, # 按groups填充颜色
+       type="s", # 画球，'p' for points, 's' for spheres, 'l' for lines, 'h' for line segments 
+       size=1, #球的大小
+       lwd=2, box=T)+
+  text3d(pca$ind$coord[,1:3],texts = rownames(pca$ind$coord),col="black")
+rgl.snapshot("E:/lncRNA_analysis/PCA_new/3dPCAoftemfcd3.png")
