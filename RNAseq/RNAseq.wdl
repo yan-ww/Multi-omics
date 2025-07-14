@@ -4,6 +4,9 @@ workflow RNAseq{
     String multiqc
     String trim_glore
 
+    ### index files
+    String homo_gtf
+
     ###run modules
     Boolean run_allStep_boolean=false
 	Boolean run_bam2TPM_boolean=true
@@ -61,7 +64,40 @@ workflow RNAseq{
             stringtie=stringtie,
             bam_list=Hisat2.bam_list,
             out_dir=out_dir,
+            script_dir=script_dir,
+            homo_gtf=homo_gtf
+    }
+
+    call Combine{
+        input:
+            cfg_mRNA_genecount_list=Stringtie.cfg_mRNA_genecount_list
+
+    }
+    
+    call PCA{
+        input:
+            sample_info=sample_info,
+            allRNA_genecount=Combine.allRNA_genecount,
+            out_dir=out_dir,
             script_dir=script_dir
+    }
+
+    call DESeq2{
+        input:
+            sample_info=sample_info,
+            mRNA_genecount=Combine.mRNA_genecount,
+            lncRNA_genecount=Combine.lncRNA_genecount,
+            allRNA_genecount=Combine.allRNA_genecount,
+            out_dir=out_dir,
+            script_dir=script_dir
+    }
+
+    call GSEA{
+        input:
+            DEGresult=DESeq2.DEGresult,
+            out_dir=out_dir,
+            script_dir=script_dir
+
     }
 }
 
@@ -150,11 +186,65 @@ task Stringtie{
     String bam_list
     String out_dir
     String script_dir
+    String homo_gtf
     command <<<
         set -e
         sh ${script_dir}/stringtie.sh
     >>>
     output{
-        
+        String gtf="${out_dir}/${sample_name}/08_bam2allTrascript/${sample_name}_transcripts.gtf"
+    }
+}
+
+task Combine{
+    String cfg_mRNA_genecount_list
+    command <<<
+        set -e
+        sh ${script_dir}/Combine.sh
+    >>>
+    output{
+        String mRNA_genecount=
+        String lncRNA_genecount=
+        String allRNA_genecount=
+    }
+}
+
+task PCA{
+    String sample_info
+    String allRNA_genecount
+    String out_dir
+    String script_dir
+    command <<<
+        set -e
+        Rscript ${script_dir}/PCA.R ${out_dir} ${allRNA_genecount}
+    >>>
+}
+
+task DESeq2{
+    String sample_info
+    String mRNA_genecount
+    String lncRNA_genecount
+    String allRNA_genecount
+    String out_dir
+    String script_dir
+    command <<<
+        set -e
+        Rscript ${script_dir}/DifferentialExpressionAnalysis.R ${out_dir} ${mRNA_genecount}
+    >>>
+    output{
+        String DEGresult=
+    }
+}
+
+task GSEA{
+    String DEGresult
+    String out_dir
+    String script_dir
+    command <<<
+        set -e
+        Rscript ${script_dir}/GSEA.R ${out_dir} ${DEGresult}
+    >>>
+    output{
+        String gseago=
     }
 }

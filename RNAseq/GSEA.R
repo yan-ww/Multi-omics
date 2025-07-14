@@ -2,6 +2,7 @@
 args = commandArgs(T)
 options(stringsAsFactors = FALSE)
 setwd(args[1])
+DEGpath=args[2]
 
 
 # library----
@@ -12,7 +13,7 @@ options(download.file.method="wget")
 
 
 # GO
-gseadata = read.table("../DEGresult.txt",sep="\t",header=T,row.names=1)
+gseadata = read.table(DEGpath,sep="\t",header=T,row.names=1)
 gseadata = gseadata[order(gseadata$log2FoldChange,decreasing = T),]
 gene_list = gseadata$log2FoldChange
 names(gene_list) = rownames(gseadata)
@@ -29,7 +30,7 @@ write.csv(gseago.res,"GSEAGO.CSV",quote =FALSE)
 
 
 #KEGG
-gseadata = read.table("../DEGresult.txt",sep="\t",header=T,row.names=1)
+gseadata = read.table(DEGpath,sep="\t",header=T,row.names=1)
 gene <- bitr(rownames(gseadata), fromType = "SYMBOL", toType = "ENTREZID", OrgDb=org.Hs.eg.db)
 gene <- dplyr::distinct(gene,SYMBOL,.keep_all=TRUE)
 data <- merge(gene,gseadata,by.x = "SYMBOL",by.y = "row.names")
