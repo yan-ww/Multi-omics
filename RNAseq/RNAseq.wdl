@@ -3,6 +3,7 @@ workflow RNAseq{
     String fastqc
     String multiqc
     String trim_glore
+    String docker
 
     ### index files
     String homo_gtf
@@ -115,6 +116,14 @@ task Task_Allocation{
     output{
         String allocated_list=${out_dir}/cfg_task_Allocation.list
     }
+
+    runtime{
+		docker:"gmseq/bioinfonda:v1.0.5"
+		cpu:"1"
+		memory:"1G"
+		num_proc:"1"
+		maxRetries:2
+    }
 }
 
 task Fastqc{
@@ -131,6 +140,13 @@ task Fastqc{
     output{
         raw_fq_report=${out_dir}/raw_fastqc_report.html
     }
+    runtime{
+		docker:"gmseq/bioinfonda:v1.0.5"
+		cpu:"1"
+		memory:"1G"
+		num_proc:"1"
+		maxRetries:2
+    }    
 }
 
 task Trim_glore{
@@ -145,6 +161,13 @@ task Trim_glore{
     >>>
     output{
         clean_fq_list=${out_dir}/cleanfq.lst
+    }
+    runtime{
+		docker:"gmseq/bioinfonda:v1.0.5"
+		cpu:"1"
+		memory:"1G"
+		num_proc:"1"
+		maxRetries:2
     }
 }
 
@@ -161,6 +184,13 @@ task Fastqc2n{
     >>>
     output{
         clean_fq_report=${out_dir}/clean_fastqc_report.html
+    }
+    runtime{
+		docker:"gmseq/bioinfonda:v1.0.5"
+		cpu:"1"
+		memory:"1G"
+		num_proc:"1"
+		maxRetries:2
     }
 }
 
@@ -179,6 +209,13 @@ task Hisat2{
     output{
         bam_list=${out_dir}/bam.lst
     }
+    runtime{
+		docker:"gmseq/bioinfonda:v1.0.5"
+		cpu:"1"
+		memory:"1G"
+		num_proc:"1"
+		maxRetries:2
+    }
 }
 
 task Stringtie{
@@ -194,6 +231,13 @@ task Stringtie{
     output{
         String gtf="${out_dir}/${sample_name}/08_bam2allTrascript/${sample_name}_transcripts.gtf"
     }
+    runtime{
+		docker:"gmseq/bioinfonda:v1.0.5"
+		cpu:"1"
+		memory:"1G"
+		num_proc:"1"
+		maxRetries:2
+    }
 }
 
 task Combine{
@@ -207,6 +251,13 @@ task Combine{
         String lncRNA_genecount=
         String allRNA_genecount=
     }
+    runtime{
+		docker:"gmseq/bioinfonda:v1.0.5"
+		cpu:"1"
+		memory:"1G"
+		num_proc:"1"
+		maxRetries:2
+    }
 }
 
 task PCA{
@@ -218,6 +269,16 @@ task PCA{
         set -e
         Rscript ${script_dir}/PCA.R ${out_dir} ${allRNA_genecount}
     >>>
+    output{
+
+    }
+    runtime{
+		docker:"gmseq/bioinfonda:v1.0.5"
+		cpu:"1"
+		memory:"1G"
+		num_proc:"1"
+		maxRetries:2
+    }
 }
 
 task DESeq2{
@@ -234,6 +295,13 @@ task DESeq2{
     output{
         String DEGresult=
     }
+    runtime{
+		docker:"gmseq/bioinfonda:v1.0.5"
+		cpu:"1"
+		memory:"1G"
+		num_proc:"1"
+		maxRetries:2
+    }
 }
 
 task GSEA{
@@ -246,5 +314,12 @@ task GSEA{
     >>>
     output{
         String gseago=
+    }
+    runtime{
+		docker:"gmseq/bioinfonda:v1.0.5"
+		cpu:"1"
+		memory:"1G"
+		num_proc:"1"
+		maxRetries:2
     }
 }
