@@ -42,13 +42,6 @@ Each pipeline is modular and reproducible, implemented mainly in **R, Python, an
 * Integration with gene expression changes
 * Visualization: methylation heatmaps, boxplots, Manhattan plots
 
-### 4. Multi-omics Integration
-
-* Linking gene expression with DNA methylation and genomic variants
-* Identification of molecular signatures associated with phenotypes
-* Network analysis and clustering of omics features
-* Machine learning approaches for classification and prediction
-
 ---
 
 ## Requirements
@@ -70,9 +63,7 @@ Multi-omics/
 │── transcriptomics/    # RNA-seq analysis scripts
 │── genomics/           # Variant calling and genomic analysis
 │── methylation/        # DNA methylation workflows
-│── integration/        # Multi-omics integration and ML models
 │── utils/              # Helper scripts and functions
-│── docs/               # Documentation and references
 ```
 
 ---
@@ -86,7 +77,9 @@ If you find this repository useful, please cite it or contact me for collaborati
 ## Contact
 
 **Yanping Weng**
+
 Email: yanping.weng@outlook.com
+
 LinkedIn: https://www.linkedin.com/in/wengyanping/
 
 
