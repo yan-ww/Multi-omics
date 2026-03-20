@@ -1,0 +1,37 @@
+"""
+RNA-seq 上游分析流程
+Author: Aubrey Yanping Weng
+"""
+
+import pandas as pd
+from pathlib import Path
+
+# 导入配置文件
+configfile: "../config/config.yaml"
+
+# 导入样本信息
+if config.get('samples_file'):
+    samples = pd.read_csv(config['samples_file'], sep='\t')
+    SAMPLES = samples['sample_name'].tolist()
+else:
+    SAMPLES = config.get('samples', [])
+
+# 包含各个步骤的规则
+include: "rules/common.smk"
+include: "rules/qualityControl.smk"
+include: "rules/alignment.smk"
+include: "rules/quantification.smk"
+include: "rules/report.smk"
+
+# 定义最终目标
+rule all:
+    input:
+        # 最终输出文件
+        expand("results/multiqc/multiqc_report.html", sample=SAMPLES),
+        expand("results/star/{sample}_Aligned.sortedByCoord.out.bam", sample=SAMPLES),
+        expand("results/featurecounts/{sample}_counts.txt", sample=SAMPLES),
+        "results/featurecounts/gene_counts.txt"
+    output:
+        touch("results/workflow_complete.txt")
+    run:
+        print("RNA-seq analysis workflow completed successfully!")

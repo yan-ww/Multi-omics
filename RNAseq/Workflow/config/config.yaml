@@ -1,0 +1,61 @@
+# RNA-seq 分析配置文件
+# 使用 fastp, hisat2, featureCounts
+
+# 样本信息
+samples_file: "config/samples.tsv"
+
+# 测序类型
+paired_end: true
+
+# 参考基因组
+reference:
+  genome_fasta: "/path/to/genome.fa"
+  gtf_file: "/path/to/annotations.gtf"
+  hisat2_index: "/path/to/hisat2_index/"
+
+# 软件线程设置
+threads:
+  fastqc: 4
+  fastp: 8
+  hisat2_index: 8
+  hisat2_align: 8
+  samtools: 4
+  featurecounts: 8
+  multiqc: 2
+
+# 修剪参数
+trimming:
+  quality: 20          # 质量阈值
+  min_length: 36       # 最小长度
+  n_base_limit: 5      # N碱基限制
+  adapter_trimming: true
+
+# HISAT2 参数
+hisat2:
+  align_options: "--rna-strandness RF"  # 根据文库类型调整
+  splice_sites: ""
+
+# featureCounts 参数
+featurecounts:
+  feature_type: "exon"
+  attribute_type: "gene_id"
+  strand: 0           # 0: unstranded, 1: stranded, 2: reversely stranded
+  min_overlap: 1
+
+# samtools 参数
+samtools:
+  memory: "2G"
+
+# 输出目录
+output_dirs:
+  fastqc_raw: "results/fastqc/raw"
+  fastqc_trimmed: "results/fastqc/trimmed"
+  trimmed: "results/trimmed"
+  hisat2: "results/hisat2"
+  featurecounts: "results/featurecounts"
+  multiqc: "results/multiqc"
+
+# MultiQC 配置
+multiqc_config:
+  title: "RNA-seq 分析报告"
+  comment: "使用 fastp + HISAT2 + featureCounts 流程"
