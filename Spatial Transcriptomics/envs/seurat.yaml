@@ -1,0 +1,14 @@
+name: seurat
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - r-base=4.2
+  - r-seurat=4.3
+  - r-ggplot2=3.4
+  - r-patchwork=1.1
+  - r-dplyr=1.1
+  - r-matrix=1.5
+  - r-reticulate=1.28
+  

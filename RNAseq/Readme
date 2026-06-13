@@ -1,0 +1,41 @@
+# 🧬 Bulk RNA-seq Analysis Pipeline with Snakemake
+
+[![Snakemake](https://img.shields.io/badge/snakemake-≥7.0-brightgreen.svg)](https://snakemake.github.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Nextflow](https://img.shields.io/badge/nextflow-Not%20today-blue)](https://snakemake.github.io)
+
+> **A production-ready, reproducible bulk RNA-seq pipeline from FASTQ to biological insights**
+
+## 🎯 What This Pipeline Does
+
+| Step | Tool | Output |
+|------|------|--------|
+| Quality Control | FastQC + MultiQC | Interactive HTML reports |
+| Read Alignment | STAR (2-pass mode) | Sorted BAM files |
+| Quantification | featureCounts | Gene-level count matrix |
+| Differential Expression | DESeq2 + apeglm | Log2FC, padj, normalized counts |
+| Functional Enrichment | clusterProfiler | GO/KEGG pathways |
+| Visualization | ggplot2 / pheatmap | Volcano plots, heatmaps, PCA |
+
+**End-to-end automation**: One command goes from `data/raw/*.fastq.gz` to `results/report.html`
+
+## 🚀 Quick Start
+
+### Prerequisites
+```bash
+# Install conda (if not already)
+# Then install Snakemake
+conda create -n snakemake -c bioconda snakemake
+conda activate snakemake
+```
+### Run the pipeline
+```bash
+# Dry run to see what will happen
+snakemake -n
+
+# Run full pipeline with test data
+snakemake --cores 4 --use-conda
+
+# Generate workflow DAG (dependency graph)
+snakemake --dag | dot -Tpng > workflow.png
+```

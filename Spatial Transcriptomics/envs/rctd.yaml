@@ -1,0 +1,11 @@
+name: rctd
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base=4.2
+  - r-spacexr=2.0
+  - r-seurat=4.3
+  - r-ggplot2=3.4
+  - python=3.9
+  - scanpy=1.9

@@ -1,0 +1,50 @@
+# config/config.yaml
+# 配置文件
+
+# 参考基因组路径
+genome:
+  star_index: "resources/genome/STAR_index"
+  gtf: "resources/genome/genes.gtf"
+  fasta: "resources/genome/genome.fa"
+
+# 实验设计
+samples_file: "config/samples.tsv"
+
+# 对比组设置 (格式: "condition_treatment_vs_control")
+contrasts:
+  - "treatment_vs_control"
+  # 可以添加更多对比组
+  # - "drugA_vs_control"
+  # - "drugB_vs_control"
+
+# DESeq2参数
+deseq2:
+  alpha: 0.05           # 显著性水平
+  lfc_threshold: 1      # log2 fold change阈值
+  lfc_shrink: true      # 是否使用apeglm收缩
+
+# 富集分析参数
+enrichment:
+  pvalue_cutoff: 0.05
+  qvalue_cutoff: 0.2
+  min_gset_size: 10
+  max_gset_size: 500
+  organism: "human"     # human, mouse, rat等
+  
+# 可视化参数
+plotting:
+  theme: "classic"
+  dpi: 300
+  format: "pdf"
+  volcano:
+    pval_cutoff: 0.05
+    log2fc_cutoff: 1
+    
+# 资源配置
+resources:
+  star:
+    mem_mb: 32000
+    time_hr: 6
+  featurecounts:
+    mem_mb: 16000
+    time_hr: 2

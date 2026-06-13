@@ -1,0 +1,62 @@
+# 项目配置
+project_name: "WGS_Germline_Pipeline"
+samples:
+  - sample1
+  - sample2
+  # 添加更多样本
+
+# 参考基因组路径 (需下载hg38或hg19)
+reference:
+  genome: "/path/to/reference/hg38.fa"
+  dict: "/path/to/reference/hg38.dict"
+  fai: "/path/to/reference/hg38.fa.fai"
+  known_sites:
+    dbsnp: "/path/to/dbsnp_138.hg38.vcf.gz"
+    mills: "/path/to/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz"
+    hapmap: "/path/to/hapmap_3.3.hg38.vcf.gz"
+    omni: "/path/to/1000G_omni2.5.hg38.vcf.gz"
+    onekg: "/path/to/1000G_phase1.snps.high_confidence.hg38.vcf.gz"
+
+# 数据路径
+data:
+  fastq_dir: "/path/to/raw_fastq"
+  output_dir: "/path/to/results"
+
+# GATK资源
+gatk:
+  jar: "/path/to/gatk-package-4.2.6.1-local.jar"
+  java_opts: "-Xmx8g"
+
+# 软件参数
+tools:
+  fastp:
+    trim_front1: 0
+    trim_front2: 0
+    cut_front: false
+    cut_front_window: 1
+    cut_front_mean_quality: 20
+    length_required: 36
+  
+  bwa:
+    mem: "-M -t 8 -R '@RG\tID:{sample}\tSM:{sample}\tLB:{sample}\tPL:ILLUMINA'"
+  
+  gatk:
+    haplotypecaller: "--emit-ref-confidence GVCF --min-base-quality-score 20"
+    variant_filter:
+      qd: 2.0
+      fs: 60.0
+      mq: 40.0
+      mqr: 4.0
+      sor: 3.0
+
+# 资源分配
+resources:
+  fastp:
+    threads: 2
+    mem_mb: 2000
+  bwa:
+    threads: 8
+    mem_mb: 16000
+  gatk:
+    threads: 4
+    mem_mb: 8000

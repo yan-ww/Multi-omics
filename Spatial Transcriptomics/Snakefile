@@ -1,0 +1,114 @@
+# Snakefile
+configfile: "config/config.yaml"
+
+# 定义样本列表
+SAMPLES = config["samples"]
+
+# 最终输出文件
+rule all:
+    input:
+        expand("results/{sample}/final_report.pdf", sample=SAMPLES),
+        expand("results/{sample}/spatially_variable_genes.csv", sample=SAMPLES),
+        expand("results/{sample}/celltype_proportions.csv", sample=SAMPLES)
+
+# 规则1: 数据预处理和质量控制
+rule preprocess:
+    input:
+        h5 = "data/{sample}/filtered_feature_bc_matrix.h5",
+        tissue = "data/{sample}/spatial/tissue_positions.csv",
+        scalefactors = "data/{sample}/spatial/scalefactors_json.json"
+    output:
+        rds = "results/{sample}/01_preprocessed.rds",
+        qc_plot = "results/{sample}/01_qc_plot.pdf"
+    conda: "envs/seurat.yaml"
+    params:
+        min_genes = config["min_genes_per_spot"],
+        max_mito = config["max_mito_percent"]
+    log:
+        "logs/{sample}/01_preprocess.log"
+    script:
+        "scripts/01_preprocess.R"
+
+# 规则2: 标准化和降维
+rule normalization:
+    input:
+        rds = "results/{sample}/01_preprocessed.rds"
+    output:
+        rds = "results/{sample}/02_normalized.rds",
+        pca_plot = "results/{sample}/02_pca_plot.pdf"
+    conda: "envs/seurat.yaml"
+    params:
+        method = config["normalization_method"]
+    log:
+        "logs/{sample}/02_normalization.log"
+    script:
+        "scripts/02_normalization.R"
+
+# 规则3: 空间聚类
+rule spatial_clustering:
+    input:
+        rds = "results/{sample}/02_normalized.rds"
+    output:
+        rds = "results/{sample}/03_clustered.rds",
+        cluster_plot = "results/{sample}/03_spatial_clusters.pdf"
+    conda: "envs/seurat.yaml"
+    params:
+        resolution = config["cluster_resolution"]
+    log:
+        "logs/{sample}/03_clustering.log"
+    script:
+        "scripts/03_spatial_clustering.R"
+
+# 规则4: 空间可变基因检测
+rule svg_detection:
+    input:
+        rds = "results/{sample}/02_normalized.rds"
+    output:
+        csv = "results/{sample}/04_spatially_variable_genes.csv",
+        heatmap = "results/{sample}/04_top_svg_heatmap.pdf"
+    conda: "envs/sparkx.yaml"
+    params:
+        method = config["svg_method"],
+        n_top = config["n_top_svg"]
+    log:
+        "logs/{sample}/04_svg_detection.log"
+    script:
+        "scripts/04_svg_detection.py"
+
+# 规则5: 细胞类型去卷积
+rule deconvolution:
+    input:
+        rds = "results/{sample}/02_normalized.rds",
+        sc_ref = config["single_cell_reference"]
+    output:
+        csv = "results/{sample}/05_celltype_proportions.csv",
+        spatial_plot = "results/{sample}/05_celltype_spatial.pdf"
+    conda: "envs/rctd.yaml"
+    params:
+        method = config["deconvolution_method"]
+    log:
+        "logs/{sample}/05_deconvolution.log"
+    script:
+        "scripts/05_deconvolution.R"
+
+# 规则6: 综合可视化报告
+rule final_report:
+    input:
+        preprocessed = "results/{sample}/01_preprocessed.rds",
+        normalized = "results/{sample}/02_normalized.rds",
+        clustered = "results/{sample}/03_clustered.rds",
+        svg = "results/{sample}/04_spatially_variable_genes.csv",
+        deconv = "results/{sample}/05_celltype_proportions.csv"
+    output:
+        pdf = "results/{sample}/06_final_report.pdf"
+    conda: "envs/seurat.yaml"
+    params:
+        sample_name = "{sample}"
+    log:
+        "logs/{sample}/06_report.log"
+    script:
+        "scripts/06_visualization.py"
+
+# 报告生成
+report:
+    "results/report.html"

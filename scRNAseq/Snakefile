@@ -1,0 +1,121 @@
+# Snakefile
+# Single-cell RNA-seq analysis pipeline using Snakemake
+
+configfile: "config/config.yaml"
+
+# 定义样本信息
+SAMPLES = config["samples"]
+
+# 设置输出目录
+OUTPUT_DIR = config["output_dir"]
+DATA_DIR = config["data_dir"]
+FIGURE_DIR = f"{OUTPUT_DIR}/figures"
+TABLE_DIR = f"{OUTPUT_DIR}/tables"
+OBJECT_DIR = f"{OUTPUT_DIR}/anndata_objects"
+
+# 创建必要的目录
+for d in [OUTPUT_DIR, FIGURE_DIR, TABLE_DIR, OBJECT_DIR, DATA_DIR]:
+    shell(f"mkdir -p {d}")
+
+# 定义规则
+rule all:
+    input:
+        expand(f"{FIGURE_DIR}/umap_clusters_{{sample}}.pdf", sample=SAMPLES),
+        expand(f"{FIGURE_DIR}/marker_heatmap_{{sample}}.pdf", sample=SAMPLES),
+        expand(f"{TABLE_DIR}/marker_genes_{{sample}}.csv", sample=SAMPLES),
+        expand(f"{OBJECT_DIR}/{{sample}}_processed.h5ad", sample=SAMPLES),
+        expand(f"{DATA_DIR}/{{sample}}.h5ad", sample=SAMPLES),
+        f"{OUTPUT_DIR}/pipeline_complete.txt"
+
+rule load_and_initial_qc:
+    """加载数据并进行初始QC"""
+    input:
+        h5=f"{DATA_DIR}/{{sample}}.h5ad"
+    output:
+        adata=f"{OBJECT_DIR}/{{sample}}_raw.h5ad",
+        qc_plot=f"{FIGURE_DIR}/{{sample}}_qc_violin.pdf"
+    params:
+        sample=lambda wildcards: wildcards.sample,
+        min_genes=config["qc"]["min_genes_per_cell"],
+        max_mito=config["qc"]["max_mito_percent"]
+    script:
+        "scripts/load_data.py"
+
+rule qc_filtering:
+    """质控过滤"""
+    input:
+        adata=f"{OBJECT_DIR}/{{sample}}_raw.h5ad"
+    output:
+        adata=f"{OBJECT_DIR}/{{sample}}_filtered.h5ad",
+        qc_report=f"{TABLE_DIR}/{{sample}}_qc_stats.csv"
+    params:
+        sample=lambda wildcards: wildcards.sample,
+        min_genes=config["qc"]["min_genes_per_cell"],
+        max_genes=config["qc"]["max_genes_per_cell"],
+        max_mito=config["qc"]["max_mito_percent"],
+        min_cells=config["qc"]["min_cells_per_gene"]
+    script:
+        "scripts/qc_filter.py"
+
+rule normalization:
+    """标准化和特征选择"""
+    input:
+        adata=f"{OBJECT_DIR}/{{sample}}_filtered.h5ad"
+    output:
+        adata=f"{OBJECT_DIR}/{{sample}}_normalized.h5ad",
+        hvg_plot=f"{FIGURE_DIR}/{{sample}}_hvg.pdf"
+    params:
+        n_top_genes=config["normalization"]["n_top_genes"]
+    script:
+        "scripts/normalization.py"
+
+rule pca_clustering:
+    """PCA、UMAP和聚类"""
+    input:
+        adata=f"{OBJECT_DIR}/{{sample}}_normalized.h5ad"
+    output:
+        adata=f"{OBJECT_DIR}/{{sample}}_clustered.h5ad",
+        pca_plot=f"{FIGURE_DIR}/{{sample}}_pca_variance.pdf",
+        umap_plot=f"{FIGURE_DIR}/{{sample}}_umap_clusters.pdf"
+    params:
+        n_pcs=config["dim_reduction"]["n_pcs"],
+        n_neighbors=config["clustering"]["n_neighbors"],
+        resolution=config["clustering"]["resolution"]
+    script:
+        "scripts/pca_clustering.py"
+
+rule marker_genes:
+    """识别每个cluster的标记基因"""
+    input:
+        adata=f"{OBJECT_DIR}/{{sample}}_clustered.h5ad"
+    output:
+        markers=f"{TABLE_DIR}/{{sample}}_marker_genes.csv",
+        heatmap=f"{FIGURE_DIR}/{{sample}}_marker_heatmap.pdf",
+        dotplot=f"{FIGURE_DIR}/{{sample}}_marker_dotplot.pdf"
+    params:
+        n_markers=config["marker_genes"]["n_top_markers_per_cluster"],
+        min_logfc=config["marker_genes"]["min_logfc"]
+    script:
+        "scripts/marker_genes.py"
+
+rule visualization:
+    """生成最终可视化"""
+    input:
+        adata=f"{OBJECT_DIR}/{{sample}}_clustered.h5ad"
+    output:
+        umap_by_cluster=f"{FIGURE_DIR}/{{sample}}_umap_clusters_final.pdf",
+        marker_genes_plot=f"{FIGURE_DIR}/{{sample}}_top_markers.pdf"
+    script:
+        "scripts/visualization.py"
+
+rule mark_complete:
+    """标记流程完成"""
+    input:
+        expand(f"{OBJECT_DIR}/{{sample}}_clustered.h5ad", sample=SAMPLES)
+    output:
+        complete=f"{OUTPUT_DIR}/pipeline_complete.txt"
+    run:
+        from datetime import datetime
+        with open(output.complete, 'w') as f:
+            f.write(f"Pipeline completed at {datetime.now()}\n")
+            f.write(f"Samples processed: {', '.join(SAMPLES)}\n")

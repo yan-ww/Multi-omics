@@ -1,0 +1,366 @@
+# Snakefile - WGS/WES Germline Analysis Pipeline
+# Author: Your Name
+# Description: GATK4 best practices for germline variant calling
+
+import os
+import pandas as pd
+from snakemake.utils import min_version
+
+min_version("6.0.0")
+
+# 加载配置文件
+configfile: "config/config.yaml"
+
+# 定义样本列表
+SAMPLES = config["samples"]
+
+# 定义路径
+RAW_DATA_DIR = config["data"]["fastq_dir"]
+RESULTS_DIR = config["data"]["output_dir"]
+REF = config["reference"]["genome"]
+KNOWN_SITES = config["reference"]["known_sites"]
+
+# 创建输出目录
+for dirname in ["fastqc_raw", "fastqc_trimmed", "trimmed_fastq", 
+                "bam", "gvcf", "vcf", "reports", "annotation"]:
+    os.makedirs(os.path.join(RESULTS_DIR, dirname), exist_ok=True)
+
+# ============================================
+# Rule 1: 所有样本的QC (原始数据)
+# ============================================
+rule all_raw_qc:
+    input:
+        expand(os.path.join(RESULTS_DIR, "fastqc_raw", "{sample}_R1_fastqc.html"), sample=SAMPLES),
+        expand(os.path.join(RESULTS_DIR, "fastqc_raw", "{sample}_R2_fastqc.html"), sample=SAMPLES)
+
+rule fastqc_raw:
+    input:
+        r1=os.path.join(RAW_DATA_DIR, "{sample}_R1.fastq.gz"),
+        r2=os.path.join(RAW_DATA_DIR, "{sample}_R2.fastq.gz")
+    output:
+        html=os.path.join(RESULTS_DIR, "fastqc_raw", "{sample}_R1_fastqc.html"),
+        zip=os.path.join(RESULTS_DIR, "fastqc_raw", "{sample}_R1_fastqc.zip"),
+        html2=os.path.join(RESULTS_DIR, "fastqc_raw", "{sample}_R2_fastqc.html"),
+        zip2=os.path.join(RESULTS_DIR, "fastqc_raw", "{sample}_R2_fastqc.zip")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "fastqc_raw_{sample}.log")
+    params:
+        threads=config["resources"]["fastp"]["threads"]
+    shell:
+        """
+        mkdir -p {RESULTS_DIR}/logs
+        fastqc -t {params.threads} {input.r1} {input.r2} -o {RESULTS_DIR}/fastqc_raw 2> {log}
+        """
+
+# ============================================
+# Rule 2: 数据清洗 (Adapter trimming & quality filtering)
+# ============================================
+rule trim_fastp:
+    input:
+        r1=os.path.join(RAW_DATA_DIR, "{sample}_R1.fastq.gz"),
+        r2=os.path.join(RAW_DATA_DIR, "{sample}_R2.fastq.gz")
+    output:
+        r1_trim=os.path.join(RESULTS_DIR, "trimmed_fastq", "{sample}_R1.trim.fastq.gz"),
+        r2_trim=os.path.join(RESULTS_DIR, "trimmed_fastq", "{sample}_R2.trim.fastq.gz"),
+        json=os.path.join(RESULTS_DIR, "reports", "{sample}_fastp.json"),
+        html=os.path.join(RESULTS_DIR, "reports", "{sample}_fastp.html")
+    params:
+        trim_front1=config["tools"]["fastp"]["trim_front1"],
+        trim_front2=config["tools"]["fastp"]["trim_front2"],
+        length_required=config["tools"]["fastp"]["length_required"]
+    log:
+        os.path.join(RESULTS_DIR, "logs", "fastp_{sample}.log")
+    threads: config["resources"]["fastp"]["threads"]
+    shell:
+        """
+        fastp -i {input.r1} -I {input.r2} \
+              -o {output.r1_trim} -O {output.r2_trim} \
+              --detect_adapter_for_pe \
+              --trim_front1 {params.trim_front1} \
+              --trim_front2 {params.trim_front2} \
+              --length_required {params.length_required} \
+              --json {output.json} \
+              --html {output.html} \
+              --thread {threads} \
+              2> {log}
+        """
+
+# ============================================
+# Rule 3: 清洗后数据QC
+# ============================================
+rule fastqc_trimmed:
+    input:
+        r1_trim=os.path.join(RESULTS_DIR, "trimmed_fastq", "{sample}_R1.trim.fastq.gz"),
+        r2_trim=os.path.join(RESULTS_DIR, "trimmed_fastq", "{sample}_R2.trim.fastq.gz")
+    output:
+        html1=os.path.join(RESULTS_DIR, "fastqc_trimmed", "{sample}_R1_fastqc.html"),
+        zip1=os.path.join(RESULTS_DIR, "fastqc_trimmed", "{sample}_R1_fastqc.zip"),
+        html2=os.path.join(RESULTS_DIR, "fastqc_trimmed", "{sample}_R2_fastqc.html"),
+        zip2=os.path.join(RESULTS_DIR, "fastqc_trimmed", "{sample}_R2_fastqc.zip")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "fastqc_trimmed_{sample}.log")
+    shell:
+        """
+        fastqc -t 2 {input.r1_trim} {input.r2_trim} -o {RESULTS_DIR}/fastqc_trimmed 2> {log}
+        """
+
+# ============================================
+# Rule 4: MultiQC报告 (汇总所有QC)
+# ============================================
+rule multiqc:
+    input:
+        raw_fastqc=expand(os.path.join(RESULTS_DIR, "fastqc_raw", "*.html"), sample=SAMPLES),
+        trimmed_fastqc=expand(os.path.join(RESULTS_DIR, "fastqc_trimmed", "*.html"), sample=SAMPLES),
+        fastp_reports=expand(os.path.join(RESULTS_DIR, "reports", "{sample}_fastp.json"), sample=SAMPLES)
+    output:
+        os.path.join(RESULTS_DIR, "reports", "multiqc_report.html")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "multiqc.log")
+    shell:
+        """
+        multiqc {RESULTS_DIR}/fastqc_raw {RESULTS_DIR}/fastqc_trimmed {RESULTS_DIR}/reports -o {RESULTS_DIR}/reports -f 2> {log}
+        """
+
+# ============================================
+# Rule 5: BWA比对
+# ============================================
+rule bwa_mem:
+    input:
+        r1_trim=os.path.join(RESULTS_DIR, "trimmed_fastq", "{sample}_R1.trim.fastq.gz"),
+        r2_trim=os.path.join(RESULTS_DIR, "trimmed_fastq", "{sample}_R2.trim.fastq.gz"),
+        ref=REF,
+        ref_index=expand("{ref}.{ext}", ref=REF, ext=["amb", "ann", "bwt", "pac", "sa"])
+    output:
+        sam=os.path.join(RESULTS_DIR, "bam", "{sample}.aligned.sam")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "bwa_{sample}.log")
+    params:
+        rg=config["tools"]["bwa"]["mem"].format(sample="{sample}")
+    threads: config["resources"]["bwa"]["threads"]
+    shell:
+        """
+        bwa mem -t {threads} {params.rg} {input.ref} {input.r1_trim} {input.r2_trim} > {output.sam} 2> {log}
+        """
+
+# ============================================
+# Rule 6: SAM到BAM转换, 排序, 标记重复
+# ============================================
+rule process_bam:
+    input:
+        sam=os.path.join(RESULTS_DIR, "bam", "{sample}.aligned.sam")
+    output:
+        bam=os.path.join(RESULTS_DIR, "bam", "{sample}.sorted.bam"),
+        bai=os.path.join(RESULTS_DIR, "bam", "{sample}.sorted.bam.bai"),
+        metrics=os.path.join(RESULTS_DIR, "bam", "{sample}.marked_dup_metrics.txt")
+    log:
+        markdup=os.path.join(RESULTS_DIR, "logs", "markdup_{sample}.log"),
+        sort=os.path.join(RESULTS_DIR, "logs", "sort_{sample}.log")
+    params:
+        java_opts=config["gatk"]["java_opts"]
+    run:
+        shell("""
+            samtools view -bS {input.sam} > {output.bam}.temp
+            samtools sort -@ 2 -o {output.bam} {output.bam}.temp 2> {log.sort}
+            samtools index {output.bam} 2> {log.sort}
+            
+            gatk MarkDuplicates \
+                -I {output.bam} \
+                -O {output.bam}.marked.bam \
+                -M {output.metrics} \
+                2> {log.markdup}
+            
+            mv {output.bam}.marked.bam {output.bam}
+            samtools index {output.bam}
+            rm -f {output.bam}.temp {input.sam}
+        """)
+
+# ============================================
+# Rule 7: BQSR (Base Quality Score Recalibration)
+# ============================================
+rule bqsr:
+    input:
+        bam=os.path.join(RESULTS_DIR, "bam", "{sample}.sorted.bam"),
+        ref=REF,
+        known_sites=[KNOWN_SITES["dbsnp"], KNOWN_SITES["mills"], 
+                     KNOWN_SITES["hapmap"], KNOWN_SITES["omni"], 
+                     KNOWN_SITES["onekg"]]
+    output:
+        recal_table=os.path.join(RESULTS_DIR, "bam", "{sample}.recal.table"),
+        recal_bam=os.path.join(RESULTS_DIR, "bam", "{sample}.recal.bam"),
+        recal_bai=os.path.join(RESULTS_DIR, "bam", "{sample}.recal.bam.bai")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "bqsr_{sample}.log")
+    params:
+        java_opts=config["gatk"]["java_opts"]
+    threads: config["resources"]["gatk"]["threads"]
+    shell:
+        """
+        gatk BaseRecalibrator \
+            -I {input.bam} \
+            -R {input.ref} \
+            --known-sites {input.known_sites[0]} \
+            --known-sites {input.known_sites[1]} \
+            --known-sites {input.known_sites[2]} \
+            --known-sites {input.known_sites[3]} \
+            --known-sites {input.known_sites[4]} \
+            -O {output.recal_table} \
+            2> {log}
+        
+        gatk ApplyBQSR \
+            -I {input.bam} \
+            -R {input.ref} \
+            --bqsr-recal-file {output.recal_table} \
+            -O {output.recal_bam} \
+            2>> {log}
+        
+        samtools index {output.recal_bam}
+        """
+
+# ============================================
+# Rule 8: HaplotypeCaller生成GVCF
+# ============================================
+rule haplotype_caller:
+    input:
+        bam=os.path.join(RESULTS_DIR, "bam", "{sample}.recal.bam"),
+        ref=REF
+    output:
+        gvcf=os.path.join(RESULTS_DIR, "gvcf", "{sample}.g.vcf.gz"),
+        gvcf_idx=os.path.join(RESULTS_DIR, "gvcf", "{sample}.g.vcf.gz.tbi")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "haplotypecaller_{sample}.log")
+    params:
+        java_opts=config["gatk"]["java_opts"],
+        opts=config["tools"]["gatk"]["haplotypecaller"]
+    threads: config["resources"]["gatk"]["threads"]
+    shell:
+        """
+        gatk HaplotypeCaller \
+            -R {input.ref} \
+            -I {input.bam} \
+            -O {output.gvcf} \
+            -ERC GVCF \
+            {params.opts} \
+            2> {log}
+        """
+
+# ============================================
+# Rule 9: 联合基因分型 (如果样本>1)
+# ============================================
+if len(SAMPLES) > 1:
+    rule combine_gvcfs:
+        input:
+            gvcfs=expand(os.path.join(RESULTS_DIR, "gvcf", "{sample}.g.vcf.gz"), sample=SAMPLES),
+            intervals=os.path.join(RESULTS_DIR, "intervals.list")  # 可选: 按chr分区间
+        output:
+            combined_gvcf=os.path.join(RESULTS_DIR, "gvcf", "combined.g.vcf.gz"),
+            combined_idx=os.path.join(RESULTS_DIR, "gvcf", "combined.g.vcf.gz.tbi")
+        log:
+            os.path.join(RESULTS_DIR, "logs", "combine_gvcfs.log")
+        shell:
+            """
+            gatk CombineGVCFs \
+                -R {input.reference} \
+                --variant {input.gvcfs} \
+                -O {output.combined_gvcf} \
+                2> {log}
+            """
+    
+    rule genotype_gvcfs:
+        input:
+            combined_gvcf=os.path.join(RESULTS_DIR, "gvcf", "combined.g.vcf.gz"),
+            ref=REF
+        output:
+            raw_vcf=os.path.join(RESULTS_DIR, "vcf", "raw_variants.vcf.gz"),
+            raw_vcf_idx=os.path.join(RESULTS_DIR, "vcf", "raw_variants.vcf.gz.tbi")
+        log:
+            os.path.join(RESULTS_DIR, "logs", "genotype_gvcfs.log")
+        shell:
+            """
+            gatk GenotypeGVCFs \
+                -R {input.ref} \
+                -V {input.combined_gvcf} \
+                -O {output.raw_vcf} \
+                2> {log}
+            """
+else:
+    # 单样本模式: 直接从GVCF到VCF
+    rule genotype_gvcfs_single:
+        input:
+            gvcf=os.path.join(RESULTS_DIR, "gvcf", "{sample}.g.vcf.gz"),
+            ref=REF
+        output:
+            raw_vcf=os.path.join(RESULTS_DIR, "vcf", "{sample}.raw_variants.vcf.gz")
+        log:
+            os.path.join(RESULTS_DIR, "logs", "genotype_{sample}.log")
+        shell:
+            """
+            gatk GenotypeGVCFs \
+                -R {input.ref} \
+                -V {input.gvcf} \
+                -O {output.raw_vcf} \
+                2> {log}
+            """
+
+# ============================================
+# Rule 10: 变异过滤
+# ============================================
+rule filter_variants:
+    input:
+        raw_vcf=os.path.join(RESULTS_DIR, "vcf", "raw_variants.vcf.gz") if len(SAMPLES) > 1 \
+                else os.path.join(RESULTS_DIR, "vcf", "{sample}.raw_variants.vcf.gz")
+    output:
+        filtered_snps=os.path.join(RESULTS_DIR, "vcf", "filtered_snps.vcf.gz"),
+        filtered_indels=os.path.join(RESULTS_DIR, "vcf", "filtered_indels.vcf.gz")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "filter_variants.log")
+    params:
+        snp_filters=config["tools"]["gatk"]["variant_filter"],
+        java_opts=config["gatk"]["java_opts"]
+    script:
+        "../scripts/gatk_filter.py"
+
+# ============================================
+# Rule 11: 变异注释 (SnpEff)
+# ============================================
+rule annotate_variants:
+    input:
+        vcf=os.path.join(RESULTS_DIR, "vcf", "filtered_snps.vcf.gz")
+    output:
+        annotated_vcf=os.path.join(RESULTS_DIR, "annotation", "annotated_variants.vcf.gz"),
+        summary_csv=os.path.join(RESULTS_DIR, "annotation", "variant_summary.csv")
+    log:
+        os.path.join(RESULTS_DIR, "logs", "annotation.log")
+    params:
+        snpeff_db="GRCh38.99"  # 根据参考基因组修改
+    script:
+        "../scripts/variant_annotation.py"
+
+# ============================================
+# Rule 12: 最终报告生成
+# ============================================
+rule final_report:
+    input:
+        annotated_vcf=os.path.join(RESULTS_DIR, "annotation", "annotated_variants.vcf.gz"),
+        summary_csv=os.path.join(RESULTS_DIR, "annotation", "variant_summary.csv"),
+        multiqc=os.path.join(RESULTS_DIR, "reports", "multiqc_report.html")
+    output:
+        report=os.path.join(RESULTS_DIR, "final_report.html")
+    run:
+        shell("""
+            echo "<html><body>" > {output.report}
+            echo "<h1>WGS Pipeline Results</h1>" >> {output.report}
+            echo "<h2>Variants Summary</h2>" >> {output.report}
+            echo "<pre>" >> {output.report}
+            cat {input.summary_csv} >> {output.report}
+            echo "</pre>" >> {output.report}
+            echo "<h2>QC Report</h2>" >> {output.report}
+            echo "<iframe src='{input.multiqc}' width='100%' height='600px'></iframe>" >> {output.report}
+            echo "</body></html>" >> {output.report}
+        """)
+
+# ============================================
+# 目标Rule
+# ============================================
+rule all:
+    input:
+        os.path.join(RESULTS_DIR, "final_report.html")

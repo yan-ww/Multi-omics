@@ -1,0 +1,15 @@
+channels:
+  - bioconda
+  - conda-forge
+  - r
+dependencies:
+  - r-base=4.2
+  - r-deseq2=1.38.0
+  - r-apeglm=1.20.0
+  - r-tidyverse=2.0.0
+  - r-pheatmap=1.0.12
+  - r-ggplot2=3.4.0
+  - r-ggrepel=0.9.2
+  - r-clusterprofiler=4.6.0
+  - r-org.hs.eg.db=3.16.0
+  - r-biocparallel=1.32.0

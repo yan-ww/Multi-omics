@@ -1,0 +1,45 @@
+# 甲基化分析配置文件
+
+# 参考基因组路径
+reference:
+  genome: "resources/genome/hg19.fa"
+  bismark_index: "resources/genome/Bismark_index"
+
+# 样本信息文件
+samples: "data/samples.csv"
+
+# 分析参数
+params:
+  trim_galore:
+    quality: 20           # 质量阈值
+    length: 36            # 最小长度
+    stringency: 3         # 接头匹配严谨度
+  
+  bismark:
+    align:
+      -N: 1               # 错配数限制
+      -L: 20              # 种子序列长度
+      score_min: "L,0,-0.2"  # 比对分数函数
+    methylation_extractor:
+      -p                  # 双端模式
+      --no_overlap        # 不重叠 read1/read2
+      --comprehensive     # 输出所有甲基化上下文
+      --bedgraph          # 输出 bedGraph 格式
+      --CX                # 输出单碱基甲基化
+      --genome_folder: "resources/genome/Bismark_index"
+  
+  diff_methylation:
+    min_coverage: 10      # 最小覆盖度
+    min_difference: 0.25  # 最小甲基化差异（25%）
+    pvalue_threshold: 0.05
+
+# 线程数
+threads:
+  trim_galore: 4
+  bismark: 8
+  sort: 4
+
+# 资源限制
+resources:
+  mem_mb: 32000
+  time_min: 720

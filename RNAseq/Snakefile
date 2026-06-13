@@ -1,0 +1,259 @@
+# Snakefile
+# Bulk RNA-seq pipeline with Snakemake
+
+import pandas as pd
+import os
+
+# 加载配置文件
+configfile: "config/config.yaml"
+
+# 加载样本信息
+samples = pd.read_csv("config/samples.tsv", sep="\t").set_index("sample", drop=False)
+
+# 定义样本列表
+SAMPLES = samples["sample"].tolist()
+
+# 定义对比组
+CONTRASTS = config["contrasts"]
+
+# 定义参考基因组路径
+GENOME_DIR = config["genome"]["star_index"]
+GTF_FILE = config["genome"]["gtf"]
+
+# 所有最终输出文件
+rule all:
+    input:
+        # QC报告
+        "results/qc/multiqc_report.html",
+        # 比对统计汇总
+        "results/qc/alignment_stats.tsv",
+        # 表达矩阵
+        "results/expression/counts_matrix.csv",
+        "results/expression/tpm_matrix.csv",
+        # 差异分析结果
+        expand("results/deseq2/{contrast}_DE_results.csv", contrast=CONTRASTS),
+        expand("results/deseq2/{contrast}_normalized_counts.csv", contrast=CONTRASTS),
+        # 可视化
+        expand("results/figures/{contrast}_volcano.pdf", contrast=CONTRASTS),
+        expand("results/figures/{contrast}_heatmap.pdf", contrast=CONTRASTS),
+        expand("results/figures/{contrast}_pca.pdf", contrast=CONTRASTS),
+        # 富集分析
+        expand("results/enrichment/{contrast}_GO_results.csv", contrast=CONTRASTS),
+        expand("results/enrichment/{contrast}_KEGG_results.csv", contrast=CONTRASTS),
+        # 最终报告
+        "results/report.html"
+
+# 1. 质量控制 - FastQC
+rule fastqc:
+    input:
+        "data/raw/{sample}.fastq.gz"
+    output:
+        "results/qc/fastqc/{sample}_fastqc.html",
+        "results/qc/fastqc/{sample}_fastqc.zip"
+    log:
+        "logs/fastqc/{sample}.log"
+    conda:
+        "envs/fastqc.yaml"
+    shell:
+        """
+        fastqc {input} -o results/qc/fastqc/ 2> {log}
+        """
+
+# 2. MultiQC汇总
+rule multiqc:
+    input:
+        expand("results/qc/fastqc/{sample}_fastqc.html", sample=SAMPLES)
+    output:
+        "results/qc/multiqc_report.html"
+    log:
+        "logs/multiqc/multiqc.log"
+    conda:
+        "envs/multiqc.yaml"
+    shell:
+        """
+        multiqc results/qc/fastqc/ -o results/qc/ -n multiqc_report.html 2> {log}
+        """
+
+# 3. STAR比对
+rule star_alignment:
+    input:
+        fq1 = "data/raw/{sample}_R1.fastq.gz",
+        fq2 = "data/raw/{sample}_R2.fastq.gz",
+        index = GENOME_DIR
+    output:
+        bam = "results/star/{sample}/Aligned.sortedByCoord.out.bam",
+        log_final = "results/star/{sample}/Log.final.out"
+    params:
+        genome_dir = GENOME_DIR,
+        out_prefix = "results/star/{sample}/"
+    log:
+        "logs/star/{sample}_align.log"
+    threads: 8
+    conda:
+        "envs/star.yaml"
+    shell:
+        """
+        STAR --genomeDir {params.genome_dir} \
+              --readFilesIn {input.fq1} {input.fq2} \
+              --readFilesCommand zcat \
+              --runThreadN {threads} \
+              --outFileNamePrefix {params.out_prefix} \
+              --outSAMtype BAM SortedByCoordinate \
+              --outBAMcompression 6 \
+              --outSAMattrRGline ID:{wildcards.sample} SM:{wildcards.sample} \
+              --outFilterMultimapNmax 20 \
+              --outFilterMismatchNmax 999 \
+              --alignIntronMin 20 \
+              --alignIntronMax 1000000 \
+              --outSAMstrandField intronMotif \
+              2> {log}
+        """
+
+# 4. 提取比对统计信息
+rule parse_star_log:
+    input:
+        "results/star/{sample}/Log.final.out"
+    output:
+        "results/qc/star_stats/{sample}_stats.txt"
+    run:
+        import re
+        with open(input[0], 'r') as f:
+            content = f.read()
+        
+        stats = {
+            'sample': wildcards.sample,
+            'total_reads': re.search(r"Number of input reads\s+\|\s+(\d+)", content),
+            'uniquely_mapped': re.search(r"Uniquely mapped reads number\s+\|\s+(\d+)", content),
+            'multimapped': re.search(r"Number of reads mapped to multiple loci\s+\|\s+(\d+)", content)
+        }
+        
+        with open(output[0], 'w') as out:
+            out.write(f"sample\t{stats['sample']}\n")
+            for key in ['total_reads', 'uniquely_mapped', 'multimapped']:
+                if stats[key]:
+                    out.write(f"{key}\t{stats[key].group(1)}\n")
+
+# 5. 汇总比对统计
+rule aggregate_alignment_stats:
+    input:
+        expand("results/qc/star_stats/{sample}_stats.txt", sample=SAMPLES)
+    output:
+        "results/qc/alignment_stats.tsv"
+    run:
+        import pandas as pd
+        all_stats = []
+        for f in input:
+            data = {}
+            with open(f, 'r') as infile:
+                for line in infile:
+                    key, val = line.strip().split('\t')
+                    data[key] = val
+            all_stats.append(data)
+        
+        df = pd.DataFrame(all_stats)
+        df.to_csv(output[0], sep='\t', index=False)
+
+# 6. featureCounts定量
+rule featurecounts:
+    input:
+        expand("results/star/{sample}/Aligned.sortedByCoord.out.bam", sample=SAMPLES)
+    output:
+        "results/expression/counts_raw.txt"
+    log:
+        "logs/featurecounts/featurecounts.log"
+    params:
+        gtf = GTF_FILE,
+        threads = 8
+    threads: 8
+    conda:
+        "envs/featurecounts.yaml"
+    shell:
+        """
+        featureCounts -T {threads} \
+                       -a {params.gtf} \
+                       -g gene_id \
+                       -o {output} \
+                       -p \
+                       -s 2 \
+                       --countReadPairs \
+                       {input} 2> {log}
+        """
+
+# 7. 处理counts矩阵（添加基因名称等）
+rule process_counts:
+    input:
+        "results/expression/counts_raw.txt"
+    output:
+        counts_csv = "results/expression/counts_matrix.csv",
+        tpm_csv = "results/expression/tpm_matrix.csv"
+    script:
+        "scripts/process_counts.py"
+
+# 8. DESeq2差异分析
+rule deseq2_analysis:
+    input:
+        counts = "results/expression/counts_matrix.csv",
+        samples_tsv = "config/samples.tsv"
+    output:
+        de_results = expand("results/deseq2/{contrast}_DE_results.csv", contrast=CONTRASTS),
+        norm_counts = expand("results/deseq2/{contrast}_normalized_counts.csv", contrast=CONTRASTS),
+        rdata = "results/deseq2/deseq2_object.RData"
+    params:
+        contrasts = CONTRASTS
+    script:
+        "scripts/deseq2_analysis.R"
+
+# 9. 火山图
+rule volcano_plot:
+    input:
+        "results/deseq2/{contrast}_DE_results.csv"
+    output:
+        "results/figures/{contrast}_volcano.pdf"
+    params:
+        contrast = "{contrast}"
+    script:
+        "scripts/volcano_plot.R"
+
+# 10. 热图
+rule heatmap:
+    input:
+        norm_counts = "results/deseq2/{contrast}_normalized_counts.csv",
+        de_results = "results/deseq2/{contrast}_DE_results.csv"
+    output:
+        "results/figures/{contrast}_heatmap.pdf"
+    params:
+        contrast = "{contrast}"
+    script:
+        "scripts/heatmap.R"
+
+# 11. PCA图
+rule pca_plot:
+    input:
+        "results/deseq2/all_samples_normalized_counts.csv"
+    output:
+        "results/figures/{contrast}_pca.pdf"
+    script:
+        "scripts/pca_plot.R"
+
+# 12. 富集分析
+rule enrichment_analysis:
+    input:
+        "results/deseq2/{contrast}_DE_results.csv"
+    output:
+        go = "results/enrichment/{contrast}_GO_results.csv",
+        kegg = "results/enrichment/{contrast}_KEGG_results.csv"
+    params:
+        contrast = "{contrast}"
+    script:
+        "scripts/enrichment_analysis.R"
+
+# 13. 生成最终报告
+rule generate_report:
+    input:
+        multiqc = "results/qc/multiqc_report.html",
+        alignment_stats = "results/qc/alignment_stats.tsv",
+        de_results = expand("results/deseq2/{contrast}_DE_results.csv", contrast=CONTRASTS)
+    output:
+        "results/report.html"
+    script:
+        "scripts/generate_report.Rmd"

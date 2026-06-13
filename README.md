@@ -60,9 +60,11 @@ Please refer to each subfolder for specific installation and usage instructions.
 
 ```
 Multi-omics/
-│── transcriptomics/    # RNA-seq analysis scripts
-│── genomics/           # Variant calling and genomic analysis
-│── methylation/        # DNA methylation workflows
+│── RNAseq/    # RNA-seq analysis workflows
+|—— scRNAseq/  # single-cell RNA-seq analysis workflows
+│── WGS_WES/           # Variant calling and genomic analysis
+│── DNA Methylation/        # DNA methylation workflows
+|—— Spatial Transcriptomics/ # ST workflows
 │── utils/              # Helper scripts and functions
 ```
 

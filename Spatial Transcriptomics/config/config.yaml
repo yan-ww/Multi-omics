@@ -1,0 +1,34 @@
+# 配置文件
+# 样本列表和数据路径(需要修改)
+samples:
+  - sample1
+  - sample2
+
+data_dir: "data"
+results_dir: "results"
+
+# 单细胞参考数据（用于去卷积）
+single_cell_reference: "data/sc_reference.h5ad"
+
+# 预处理参数
+min_genes_per_spot: 200
+max_mito_percent: 20
+
+# 标准化方法
+normalization_method: "SCT"  # 可选: "SCT", "LogNormalize"
+
+# 聚类参数
+cluster_resolution: 0.5
+
+# 空间可变基因检测
+svg_method: "SPARK"  # 可选: "SPARK", "SpatialDE"
+n_top_svg: 100
+
+# 去卷积方法
+deconvolution_method: "RCTD"  # 可选: "RCTD", "cell2location"
+
+# 可视化参数
+color_palette: "Spectral"
+fig_width: 10
+fig_height: 8
+dpi: 300

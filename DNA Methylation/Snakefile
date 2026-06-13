@@ -1,0 +1,268 @@
+# ============================================
+# DNA Methylation Pipeline with Snakemake
+# Tools: FastQC, Trim Galore, Bismark, methylKit
+# ============================================
+
+import pandas as pd
+from snakemake.utils import min_version
+
+min_version("6.0.0")
+
+# 加载配置
+configfile: "config.yaml"
+
+# 读取样本信息
+sample_table = pd.read_csv(config["samples"])
+SAMPLES = sample_table["sample_name"].tolist()
+CONDITIONS = dict(zip(sample_table["sample_name"], sample_table["condition"]))
+
+# 定义输出目录
+RAW_DIR = "data/raw_fastq"
+TRIMMED_DIR = "results/01_trimmed"
+QC_DIR = "results/00_fastqc"
+BAM_DIR = "results/02_bismark_bams"
+METHYL_DIR = "results/03_methylation"
+DMR_DIR = "results/04_dmr"
+REPORT_DIR = "results/05_reports"
+
+# ============================================
+# Rule 0: 创建目录
+# ============================================
+rule all:
+    input:
+        expand(f"{REPORT_DIR}/multiqc_report.html", condition=CONDITIONS),
+        expand(f"{DMR_DIR}/dmr_summary.csv", condition=CONDITIONS),
+        f"{REPORT_DIR}/methylation_summary.pdf"
+
+# ============================================
+# Rule 1: 原始数据质控 (FastQC)
+# ============================================
+rule fastqc_raw:
+    input:
+        fq1 = lambda w: f"{RAW_DIR}/{w.sample}_R1.fastq.gz",
+        fq2 = lambda w: f"{RAW_DIR}/{w.sample}_R2.fastq.gz"
+    output:
+        html1 = f"{QC_DIR}/raw/{{sample}}_R1_fastqc.html",
+        zip1 = f"{QC_DIR}/raw/{{sample}}_R1_fastqc.zip",
+        html2 = f"{QC_DIR}/raw/{{sample}}_R2_fastqc.html",
+        zip2 = f"{QC_DIR}/raw/{{sample}}_R2_fastqc.zip"
+    log:
+        f"{QC_DIR}/raw/{{sample}}_fastqc.log"
+    threads: 2
+    wrapper:
+        "v2.5.0/bio/fastqc"
+
+# ============================================
+# Rule 2: 修剪接头和低质量碱基 (Trim Galore)
+# ============================================
+rule trim_galore:
+    input:
+        fq1 = f"{RAW_DIR}/{{sample}}_R1.fastq.gz",
+        fq2 = f"{RAW_DIR}/{{sample}}_R2.fastq.gz"
+    output:
+        r1 = f"{TRIMMED_DIR}/{{sample}}_R1_val_1.fq.gz",
+        r2 = f"{TRIMMED_DIR}/{{sample}}_R2_val_2.fq.gz"
+    params:
+        quality = config["params"]["trim_galore"]["quality"],
+        length = config["params"]["trim_galore"]["length"],
+        stringency = config["params"]["trim_galore"]["stringency"]
+    log:
+        f"{TRIMMED_DIR}/{{sample}}_trim_galore.log"
+    threads: config["threads"]["trim_galore"]
+    wrapper:
+        "v2.5.0/bio/trim_galore"
+
+# ============================================
+# Rule 3: 修剪后质控
+# ============================================
+rule fastqc_trimmed:
+    input:
+        fq1 = f"{TRIMMED_DIR}/{{sample}}_R1_val_1.fq.gz",
+        fq2 = f"{TRIMMED_DIR}/{{sample}}_R2_val_2.fq.gz"
+    output:
+        html1 = f"{QC_DIR}/trimmed/{{sample}}_R1_fastqc.html",
+        zip1 = f"{QC_DIR}/trimmed/{{sample}}_R1_fastqc.zip",
+        html2 = f"{QC_DIR}/trimmed/{{sample}}_R2_fastqc.html",
+        zip2 = f"{QC_DIR}/trimmed/{{sample}}_R2_fastqc.zip"
+    log:
+        f"{QC_DIR}/trimmed/{{sample}}_fastqc.log"
+    threads: 2
+    wrapper:
+        "v2.5.0/bio/fastqc"
+
+# ============================================
+# Rule 4: 构建 Bismark 索引（仅运行一次）
+# ============================================
+rule bismark_index:
+    input:
+        genome = config["reference"]["genome"]
+    output:
+        done = directory(config["reference"]["bismark_index"])
+    log:
+        f"{REPORT_DIR}/bismark_index.log"
+    threads: 8
+    shell:
+        """
+        bismark_genome_preparation --verbose --parallel {threads} \
+            --path_to_bowtie2 $(dirname $(which bowtie2)) \
+            {config[reference][genome]} 2> {log}
+        touch {output.done}
+        """
+
+# ============================================
+# Rule 5: Bismark 比对
+# ============================================
+rule bismark_align:
+    input:
+        fq1 = f"{TRIMMED_DIR}/{{sample}}_R1_val_1.fq.gz",
+        fq2 = f"{TRIMMED_DIR}/{{sample}}_R2_val_2.fq.gz",
+        index = config["reference"]["bismark_index"]
+    output:
+        bam = f"{BAM_DIR}/{{sample}}.bam",
+        report = f"{BAM_DIR}/{{sample}}_bismark_report.txt"
+    params:
+        index = config["reference"]["bismark_index"],
+        N = config["params"]["bismark"]["align"]["-N"],
+        L = config["params"]["bismark"]["align"]["-L"],
+        score_min = config["params"]["bismark"]["align"]["score_min"]
+    log:
+        f"{BAM_DIR}/{{sample}}_bismark.log"
+    threads: config["threads"]["bismark"]
+    shell:
+        """
+        bismark --bowtie2 --pe --non_directional \
+            --genome {params.index} \
+            -1 {input.fq1} -2 {input.fq2} \
+            -N {params.N} -L {params.L} --score_min {params.score_min} \
+            -o {BAM_DIR} --temp_dir {BAM_DIR}/temp \
+            --sam -p {threads} 2> {log}
+        
+        # 重命名输出文件
+        mv {BAM_DIR}/{wildcards.sample}_R1_val_1_bismark_bt2_pe.bam {output.bam}
+        mv {BAM_DIR}/{wildcards.sample}_R1_val_1_bismark_bt2_PE_report.txt {output.report}
+        rm -rf {BAM_DIR}/temp
+        """
+
+# ============================================
+# Rule 6: 排序和索引 BAM
+# ============================================
+rule sort_bam:
+    input:
+        bam = f"{BAM_DIR}/{{sample}}.bam"
+    output:
+        bam_sorted = f"{BAM_DIR}/{{sample}}.sorted.bam",
+        bai = f"{BAM_DIR}/{{sample}}.sorted.bam.bai"
+    log:
+        f"{BAM_DIR}/{{sample}}_sort.log"
+    threads: config["threads"]["sort"]
+    shell:
+        """
+        samtools sort -@ {threads} -o {output.bam_sorted} {input.bam}
+        samtools index {output.bam_sorted}
+        rm {input.bam}  # 删除未排序的 BAM 节省空间
+        """
+
+# ============================================
+# Rule 7: 提取甲基化信息
+# ============================================
+rule methylation_extractor:
+    input:
+        bam = f"{BAM_DIR}/{{sample}}.sorted.bam"
+    output:
+        cov = f"{METHYL_DIR}/{{sample}}.bedgraph",
+        cx_report = f"{METHYL_DIR}/{{sample}}.CX_report.txt",
+        mbias = f"{METHYL_DIR}/{{sample}}_M-bias.png"
+    params:
+        genome = config["reference"]["genome"],
+        extractor_params = config["params"]["bismark"]["methylation_extractor"]
+    log:
+        f"{METHYL_DIR}/{{sample}}_extractor.log"
+    threads: 4
+    shell:
+        """
+        bismark_methylation_extractor \
+            --gzip --parallel {threads} \
+            --output {METHYL_DIR} \
+            --report --bedgraph --CX \
+            --genome_folder {config[reference][genome]} \
+            {input.bam} 2> {log}
+        
+        # 重命名输出文件
+        mv {METHYL_DIR}/*PE.bedGraph.gz {output.cov}.gz
+        gunzip {output.cov}.gz
+        mv {METHYL_DIR}/*CX_report.txt.gz {output.cx_report}.gz
+        gunzip {output.cx_report}.gz
+        mv {METHYL_DIR}/*M-bias.png {output.mbias}
+        """
+
+# ============================================
+# Rule 8: 合并甲基化统计报告
+# ============================================
+rule merge_stats:
+    input:
+        expand(f"{BAM_DIR}/{{sample}}_bismark_report.txt", sample=SAMPLES),
+        expand(f"{METHYL_DIR}/{{sample}}.bedgraph", sample=SAMPLES)
+    output:
+        summary = f"{REPORT_DIR}/methylation_stats.csv"
+    script:
+        "scripts/merge_methylation_stats.py"
+
+# ============================================
+# Rule 9: 差异甲基化分析（使用 methylKit）
+# ============================================
+rule dmr_analysis:
+    input:
+        cx_reports = expand(f"{METHYL_DIR}/{{sample}}.CX_report.txt", sample=SAMPLES)
+    output:
+        dmr_table = f"{DMR_DIR}/dmr_summary.csv",
+        dmr_rdata = f"{DMR_DIR}/methylkit_results.RData"
+    params:
+        sample_info = config["samples"],
+        min_cov = config["diff_methylation"]["min_coverage"],
+        min_diff = config["diff_methylation"]["min_difference"],
+        pval = config["diff_methylation"]["pvalue_threshold"]
+    script:
+        "scripts/differential_methylation.R"
+
+# ============================================
+# Rule 10: 可视化汇总
+# ============================================
+rule plot_summary:
+    input:
+        stats = f"{REPORT_DIR}/methylation_stats.csv",
+        dmr = f"{DMR_DIR}/dmr_summary.csv"
+    output:
+        pdf = f"{REPORT_DIR}/methylation_summary.pdf"
+    script:
+        "scripts/plot_methylation_summary.R"
+
+# ============================================
+# Rule 11: MultiQC 报告
+# ============================================
+rule multiqc:
+    input:
+        expand(f"{QC_DIR}/raw/{{sample}}_R1_fastqc.zip", sample=SAMPLES),
+        expand(f"{QC_DIR}/raw/{{sample}}_R2_fastqc.zip", sample=SAMPLES),
+        expand(f"{QC_DIR}/trimmed/{{sample}}_R1_fastqc.zip", sample=SAMPLES),
+        expand(f"{QC_DIR}/trimmed/{{sample}}_R2_fastqc.zip", sample=SAMPLES),
+        expand(f"{BAM_DIR}/{{sample}}_bismark_report.txt", sample=SAMPLES),
+        expand(f"{METHYL_DIR}/{{sample}}_M-bias.png", sample=SAMPLES)
+    output:
+        report = f"{REPORT_DIR}/multiqc_report.html"
+    params:
+        dirs = [QC_DIR, BAM_DIR, METHYL_DIR]
+    log:
+        f"{REPORT_DIR}/multiqc.log"
+    shell:
+        """
+        multiqc {QC_DIR} {BAM_DIR} {METHYL_DIR} \
+            -o {REPORT_DIR} \
+            -n multiqc_report.html \
+            -f 2> {log}
+        """
+
+# ============================================
+# 样本通配符约束
+# ============================================
+wildcard_constraints:
+    sample = "|".join(SAMPLES)

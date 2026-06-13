@@ -1,0 +1,11 @@
+name: scanpy
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.9
+  - scanpy=1.9
+  - pandas=2.0
+  - numpy=1.24
+  - matplotlib=3.7
+  - seaborn=0.12

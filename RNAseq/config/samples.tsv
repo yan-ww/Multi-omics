@@ -1,0 +1,7 @@
+sample	condition	group	batch
+sample1	control	control	batch1
+sample2	control	control	batch1
+sample3	control	control	batch1
+sample4	treatment	treatment	batch1
+sample5	treatment	treatment	batch1
+sample6	treatment	treatment	batch1

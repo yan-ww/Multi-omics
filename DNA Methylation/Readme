@@ -1,0 +1,75 @@
+# MethylSeq Pipeline: Production-Ready WGBS Analysis Workflow
+
+[![Snakemake](https://img.shields.io/badge/snakemake-≥7.32-blue.svg)](https://snakemake.github.io)
+[![Bismark](https://img.shields.io/badge/Bismark-0.24.0-green.svg)](https://www.bioinformatics.babraham.ac.uk/projects/bismark/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.9](https://img.shields.io/badge/python-3.9-blue.svg)](https://www.python.org/)
+
+A **reproducible, scalable, and production-ready** Snakemake pipeline for whole-genome bisulfite sequencing (WGBS) and reduced-representation bisulfite sequencing (RRBS) data analysis. From raw FASTQ to differentially methylated regions (DMRs) with full quality control.
+
+## 🎯 Why This Pipeline?
+Built with Snakemake, it offers:
+
+| Feature | Benefit |
+|---------|---------|
+| **Automatic job recovery** | Resume failed analyses from last successful step |
+| **Parallel execution** | Scale from laptop to HPC cluster without code changes |
+| **Conda environment** | One-command setup, no dependency hell |
+| **Modular design** | Easily add new tools or modify existing steps |
+| **Built-in QC** | MultiQC reports at every stage |
+
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Linux/macOS (Windows via WSL2)
+- Miniconda or Anaconda
+- 8+ GB RAM (for human WGBS; adjust based on genome size)
+
+### Step 1: Clone and setup
+```bash
+git clone https://github.com/yourusername/methylseq-pipeline.git
+cd methylseq-pipeline
+
+# Create conda environment
+conda env create -f environment.yaml
+conda activate methylseq
+```
+
+### Step 2: Prepare reference genome
+```bash
+# Download human hg19 (or your genome of choice)
+mkdir -p resources/genome
+wget -P resources/genome/ https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
+gunzip resources/genome/hg19.fa.gz
+
+# Build Bismark index (required once)
+snakemake --cores 8 bismark_index
+```
+
+### Step 3: Organize data
+data/raw_fastq/
+├── sample1_R1.fastq.gz
+├── sample1_R2.fastq.gz
+├── sample2_R1.fastq.gz
+└── sample2_R2.fastq.gz
+
+Update data/samples.csv with your experimental design:
+sample_name,condition,fastq_R1,fastq_R2
+sample1,control,data/raw_fastq/sample1_R1.fastq.gz,data/raw_fastq/sample1_R2.fastq.gz
+sample2,treatment,data/raw_fastq/sample2_R1.fastq.gz,data/raw_fastq/sample2_R2.fastq.gz
+
+### Step 4: Run the pipeline
+```bash
+# Dry-run to verify everything is configured correctly
+snakemake -n --cores 1
+
+# Run with 8 cores (adjust to your system)
+snakemake --cores 8 --use-conda
+
+# For HPC cluster (SLURM example)
+snakemake --profile slurm --jobs 20
+
+# Final results
+snakemake --report report.zip
+```
