@@ -43,36 +43,28 @@ rule all:
         # 最终报告
         "results/report.html"
 
-# 1. 质量控制 - FastQC
-rule fastqc:
+# 1. 质量控制 - Fastp
+rule fastp:
     input:
-        "data/raw/{sample}.fastq.gz"
+        fq1 = "data/raw/{sample}_R1.fastq.gz",
+        fq2 = "data/raw/{sample}_R2.fastq.gz"
     output:
-        "results/qc/fastqc/{sample}_fastqc.html",
-        "results/qc/fastqc/{sample}_fastqc.zip"
+        cleanq1 = "results/qc/fastp/clean_{sample}.fastq.gz",
+        cleanq2 = "results/qc/fastp/clean_{sample}.fastq.gz",
     log:
-        "logs/fastqc/{sample}.log"
+        "logs/fastp/{sample}.log"
     conda:
-        "envs/fastqc.yaml"
+        "envs/fastp.yaml"
     shell:
         """
-        fastqc {input} -o results/qc/fastqc/ 2> {log}
+        fastp -i {input.fq1} -I {input.fq2} \
+            -o clean_R1.fastq.gz -O clean_R2.fastq.gz \
+            --detect_adapter_for_pe \  
+            --cut_front \             
+            --cut_tail \               
+            -h report.html -j report.json 2> {log}
         """
 
-# 2. MultiQC汇总
-rule multiqc:
-    input:
-        expand("results/qc/fastqc/{sample}_fastqc.html", sample=SAMPLES)
-    output:
-        "results/qc/multiqc_report.html"
-    log:
-        "logs/multiqc/multiqc.log"
-    conda:
-        "envs/multiqc.yaml"
-    shell:
-        """
-        multiqc results/qc/fastqc/ -o results/qc/ -n multiqc_report.html 2> {log}
-        """
 
 # 3. STAR比对
 rule star_alignment:
