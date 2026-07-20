@@ -17,14 +17,12 @@ SAMPLES = samples["sample"].tolist()
 CONTRASTS = config["contrasts"]
 
 # 定义参考基因组路径
-GENOME_DIR = config["genome"]["star_index"]
+GENOME_DIR = config["genome"]["alignment_index"]
 GTF_FILE = config["genome"]["gtf"]
 
 # 所有最终输出文件
 rule all:
     input:
-        # QC报告
-        "results/qc/multiqc_report.html",
         # 比对统计汇总
         "results/qc/alignment_stats.tsv",
         # 表达矩阵
@@ -49,108 +47,74 @@ rule fastp:
         fq1 = "data/raw/{sample}_R1.fastq.gz",
         fq2 = "data/raw/{sample}_R2.fastq.gz"
     output:
-        cleanq1 = "results/qc/fastp/clean_{sample}.fastq.gz",
-        cleanq2 = "results/qc/fastp/clean_{sample}.fastq.gz",
+        cleanq1 = "results/qc/fastp/{sample}_R1_clean.fastq.gz",
+        cleanq2 = "results/qc/fastp/{sample}_R2_clean.fastq.gz",
+        report_html = "results/qc/fastp/reports/{sample}_fastp.html",
+        report_json = "results/qc/fastp/reports/{sample}_fastp.json"
     log:
         "logs/fastp/{sample}.log"
     conda:
         "envs/fastp.yaml"
+    threads: 4
     shell:
         """
         fastp -i {input.fq1} -I {input.fq2} \
-            -o clean_R1.fastq.gz -O clean_R2.fastq.gz \
-            --detect_adapter_for_pe \  
-            --cut_front \             
-            --cut_tail \               
-            -h report.html -j report.json 2> {log}
+            -o {output.cleanq1} -O {output.cleanq2} \
+            --detect_adapter_for_pe \
+            --cut_window_size 4 \
+            --cut_mean_quality 20 \
+            --length_required 36 \
+            --correction \
+            --thread {threads} \
+            -h {output.report_html} \
+            -j {output.report_json} \
+            2> {log}
         """
 
-
-# 3. STAR比对
-rule star_alignment:
+# 2. Hisat2比对
+rule hisat2_alignment:
     input:
-        fq1 = "data/raw/{sample}_R1.fastq.gz",
-        fq2 = "data/raw/{sample}_R2.fastq.gz",
+        fq1 = "results/qc/fastp/{sample}_R1_clean.fastq.gz",
+        fq2 = "results/qc/fastp/{sample}_R2_clean.fastq.gz",
         index = GENOME_DIR
     output:
-        bam = "results/star/{sample}/Aligned.sortedByCoord.out.bam",
-        log_final = "results/star/{sample}/Log.final.out"
+        bam = "results/alignment/{sample}.sorted.bam",
+        bai = "results/alignment/{sample}.sorted.bam.bai",
+        summary = "results/alignment/{sample}_hisat2_summary.txt"
     params:
         genome_dir = GENOME_DIR,
-        out_prefix = "results/star/{sample}/"
+        out_prefix = "results/alignment/{sample}/"
     log:
-        "logs/star/{sample}_align.log"
+        "logs/alignment/{sample}.log"
     threads: 8
     conda:
-        "envs/star.yaml"
+        "envs/hisat2.yaml"
     shell:
         """
-        STAR --genomeDir {params.genome_dir} \
-              --readFilesIn {input.fq1} {input.fq2} \
-              --readFilesCommand zcat \
-              --runThreadN {threads} \
-              --outFileNamePrefix {params.out_prefix} \
-              --outSAMtype BAM SortedByCoordinate \
-              --outBAMcompression 6 \
-              --outSAMattrRGline ID:{wildcards.sample} SM:{wildcards.sample} \
-              --outFilterMultimapNmax 20 \
-              --outFilterMismatchNmax 999 \
-              --alignIntronMin 20 \
-              --alignIntronMax 1000000 \
-              --outSAMstrandField intronMotif \
-              2> {log}
+        hisat2 -x {input.idx} \
+               -1 {input.fq1} \
+               -2 {input.fq2} \
+               --threads {threads} \
+               --summary-file {output.summary} \
+               --max-intronlen 200000 \
+               --min-intronlen 20 \
+               --no-unal \
+               2> {log} | \
+            samtools view -bS -@ {threads} - | \
+            samtools sort -@ {threads} -o {output.bam} -
+        
+        samtools index {output.bam}
         """
 
-# 4. 提取比对统计信息
-rule parse_star_log:
-    input:
-        "results/star/{sample}/Log.final.out"
-    output:
-        "results/qc/star_stats/{sample}_stats.txt"
-    run:
-        import re
-        with open(input[0], 'r') as f:
-            content = f.read()
-        
-        stats = {
-            'sample': wildcards.sample,
-            'total_reads': re.search(r"Number of input reads\s+\|\s+(\d+)", content),
-            'uniquely_mapped': re.search(r"Uniquely mapped reads number\s+\|\s+(\d+)", content),
-            'multimapped': re.search(r"Number of reads mapped to multiple loci\s+\|\s+(\d+)", content)
-        }
-        
-        with open(output[0], 'w') as out:
-            out.write(f"sample\t{stats['sample']}\n")
-            for key in ['total_reads', 'uniquely_mapped', 'multimapped']:
-                if stats[key]:
-                    out.write(f"{key}\t{stats[key].group(1)}\n")
 
-# 5. 汇总比对统计
-rule aggregate_alignment_stats:
-    input:
-        expand("results/qc/star_stats/{sample}_stats.txt", sample=SAMPLES)
-    output:
-        "results/qc/alignment_stats.tsv"
-    run:
-        import pandas as pd
-        all_stats = []
-        for f in input:
-            data = {}
-            with open(f, 'r') as infile:
-                for line in infile:
-                    key, val = line.strip().split('\t')
-                    data[key] = val
-            all_stats.append(data)
-        
-        df = pd.DataFrame(all_stats)
-        df.to_csv(output[0], sep='\t', index=False)
-
-# 6. featureCounts定量
+# 3. featureCounts定量
+# TODO:修改featurecounts输出
 rule featurecounts:
     input:
-        expand("results/star/{sample}/Aligned.sortedByCoord.out.bam", sample=SAMPLES)
+        expand("results/alignment/{sample}.sorted.bam", sample=SAMPLES)
     output:
-        "results/expression/counts_raw.txt"
+        counts = "results/expression/counts_raw.txt"
+        summary = "results/quantification/featurecounts/gene_counts.summary"
     log:
         "logs/featurecounts/featurecounts.log"
     params:

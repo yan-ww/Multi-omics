@@ -3,7 +3,7 @@
 
 # 参考基因组路径
 genome:
-  star_index: "resources/genome/STAR_index"
+  alignment_index: "resources/genome/grch38_tran"
   gtf: "resources/genome/genes.gtf"
   fasta: "resources/genome/genome.fa"
 
@@ -42,7 +42,7 @@ plotting:
     
 # 资源配置
 resources:
-  star:
+  hisat2:
     mem_mb: 32000
     time_hr: 6
   featurecounts:
