@@ -5,8 +5,8 @@ library(ggplot2)
 library(tidyverse)
 
 # 读取归一化counts和样本信息
-norm_counts <- read_csv("results/deseq2/all_samples_normalized_counts.csv")
-samples_df <- read_tsv("config/samples.tsv")
+norm_counts <- read_csv(snakemake@input[["norm_counts"]])
+samples_df <- read_tsv(snakemake@input[["samples_tsv"]])
 
 # 准备PCA数据
 # 使用variance-stabilizing transformation或rlog变换
@@ -14,6 +14,7 @@ samples_df <- read_tsv("config/samples.tsv")
 expression_matrix <- norm_counts %>%
   column_to_rownames("gene_id") %>%
   as.matrix()
+expression_matrix <- expression_matrix[apply(expression_matrix, 1, var) > 0, , drop = FALSE]
 
 # 对counts进行log2变换（添加伪计数）
 log_expression <- log2(expression_matrix + 1)

@@ -11,7 +11,7 @@
 | Step | Tool | Output |
 |------|------|--------|
 | Quality Control | FastQC + MultiQC | Interactive HTML reports |
-| Read Alignment | STAR (2-pass mode) | Sorted BAM files |
+| Read Alignment | Hista2 (2-pass mode) | Sorted BAM files |
 | Quantification | featureCounts | Gene-level count matrix |
 | Differential Expression | DESeq2 + apeglm | Log2FC, padj, normalized counts |
 | Functional Enrichment | clusterProfiler | GO/KEGG pathways |

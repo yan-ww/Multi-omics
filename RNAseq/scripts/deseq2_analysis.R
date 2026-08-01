@@ -6,7 +6,7 @@ library(tidyverse)
 library(apeglm)
 
 # 加载配置
-samples_df <- read_tsv(snakemake@params[["samples_tsv"]])
+samples_df <- read_tsv(snakemake@input[["samples_tsv"]])
 
 # 读取counts数据
 counts_df <- read_csv(snakemake@input[["counts"]])
@@ -54,9 +54,12 @@ for (contrast in contrasts) {
                  alpha = 0.05)
   
   # LFC收缩（使用apeglm）
-  res_shrunk <- lfcShrink(dds, 
-                          contrast = c("condition", numerator, denominator),
-                          type = "apeglm")
+  coef_name <- paste0("condition_", numerator, "_vs_", denominator)
+  res_shrunk <- if (coef_name %in% resultsNames(dds)) {
+    lfcShrink(dds, coef = coef_name, type = "apeglm")
+  } else {
+    res
+  }
   
   # 转换为数据框并添加基因名称
   res_df <- as.data.frame(res_shrunk) %>%
@@ -91,6 +94,6 @@ for (contrast in contrasts) {
 all_norm_counts <- counts(dds, normalized = TRUE) %>%
   as.data.frame() %>%
   rownames_to_column("gene_id")
-write_csv(all_norm_counts, "results/deseq2/all_samples_normalized_counts.csv")
+write_csv(all_norm_counts, snakemake@output[["all_norm_counts"]])
 
 cat("DESeq2 analysis completed successfully!\n")

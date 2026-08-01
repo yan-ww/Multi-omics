@@ -8,7 +8,8 @@ import os
 configfile: "config/config.yaml"
 
 # 加载样本信息
-samples = pd.read_csv("config/samples.tsv", sep="\t").set_index("sample", drop=False)
+SAMPLES_FILE = config.get("samples_file", "config/samples.tsv")
+samples = pd.read_csv(SAMPLES_FILE, sep="\t").set_index("sample", drop=False)
 
 # 定义样本列表
 SAMPLES = samples["sample"].tolist()
@@ -19,6 +20,9 @@ CONTRASTS = config["contrasts"]
 # 定义参考基因组路径
 GENOME_DIR = config["genome"]["alignment_index"]
 GTF_FILE = config["genome"]["gtf"]
+
+def fastq_path(column):
+    return lambda wildcards: samples.loc[wildcards.sample, column]
 
 # 所有最终输出文件
 rule all:
@@ -44,8 +48,8 @@ rule all:
 # 1. 质量控制 - Fastp
 rule fastp:
     input:
-        fq1 = "data/raw/{sample}_R1.fastq.gz",
-        fq2 = "data/raw/{sample}_R2.fastq.gz"
+        fq1 = fastq_path("fastq1"),
+        fq2 = fastq_path("fastq2")
     output:
         cleanq1 = "results/qc/fastp/{sample}_R1_clean.fastq.gz",
         cleanq2 = "results/qc/fastp/{sample}_R2_clean.fastq.gz",
@@ -75,8 +79,7 @@ rule fastp:
 rule hisat2_alignment:
     input:
         fq1 = "results/qc/fastp/{sample}_R1_clean.fastq.gz",
-        fq2 = "results/qc/fastp/{sample}_R2_clean.fastq.gz",
-        index = GENOME_DIR
+        fq2 = "results/qc/fastp/{sample}_R2_clean.fastq.gz"
     output:
         bam = "results/alignment/{sample}.sorted.bam",
         bai = "results/alignment/{sample}.sorted.bam.bai",
@@ -91,7 +94,7 @@ rule hisat2_alignment:
         "envs/hisat2.yaml"
     shell:
         """
-        hisat2 -x {input.idx} \
+        hisat2 -x {params.genome_dir} \
                -1 {input.fq1} \
                -2 {input.fq2} \
                --threads {threads} \
@@ -108,13 +111,12 @@ rule hisat2_alignment:
 
 
 # 3. featureCounts定量
-# TODO:修改featurecounts输出
 rule featurecounts:
     input:
         expand("results/alignment/{sample}.sorted.bam", sample=SAMPLES)
     output:
-        counts = "results/expression/counts_raw.txt"
-        summary = "results/quantification/featurecounts/gene_counts.summary"
+        counts = "results/expression/counts_raw.txt",
+        summary = "results/expression/counts_raw.txt.summary"
     log:
         "logs/featurecounts/featurecounts.log"
     params:
@@ -128,7 +130,7 @@ rule featurecounts:
         featureCounts -T {threads} \
                        -a {params.gtf} \
                        -g gene_id \
-                       -o {output} \
+                       -o {output.counts} \
                        -p \
                        -s 2 \
                        --countReadPairs \
@@ -149,10 +151,11 @@ rule process_counts:
 rule deseq2_analysis:
     input:
         counts = "results/expression/counts_matrix.csv",
-        samples_tsv = "config/samples.tsv"
+        samples_tsv = SAMPLES_FILE
     output:
         de_results = expand("results/deseq2/{contrast}_DE_results.csv", contrast=CONTRASTS),
         norm_counts = expand("results/deseq2/{contrast}_normalized_counts.csv", contrast=CONTRASTS),
+        all_norm_counts = "results/deseq2/all_samples_normalized_counts.csv",
         rdata = "results/deseq2/deseq2_object.RData"
     params:
         contrasts = CONTRASTS
@@ -174,7 +177,8 @@ rule volcano_plot:
 rule heatmap:
     input:
         norm_counts = "results/deseq2/{contrast}_normalized_counts.csv",
-        de_results = "results/deseq2/{contrast}_DE_results.csv"
+        de_results = "results/deseq2/{contrast}_DE_results.csv",
+        samples_tsv = SAMPLES_FILE
     output:
         "results/figures/{contrast}_heatmap.pdf"
     params:
@@ -185,7 +189,8 @@ rule heatmap:
 # 11. PCA图
 rule pca_plot:
     input:
-        "results/deseq2/all_samples_normalized_counts.csv"
+        norm_counts = "results/deseq2/all_samples_normalized_counts.csv",
+        samples_tsv = SAMPLES_FILE
     output:
         "results/figures/{contrast}_pca.pdf"
     script:
@@ -204,6 +209,25 @@ rule enrichment_analysis:
         "scripts/enrichment_analysis.R"
 
 # 13. 生成最终报告
+rule alignment_stats:
+    input:
+        expand("results/alignment/{sample}_hisat2_summary.txt", sample=SAMPLES)
+    output:
+        "results/qc/alignment_stats.tsv"
+    script:
+        "scripts/collect_alignment_stats.py"
+
+rule multiqc:
+    input:
+        fastp = expand("results/qc/fastp/reports/{sample}_fastp.json", sample=SAMPLES),
+        alignment = expand("results/alignment/{sample}_hisat2_summary.txt", sample=SAMPLES)
+    output:
+        "results/qc/multiqc_report.html"
+    conda:
+        "envs/multiqc.yaml"
+    shell:
+        "multiqc --force --outdir results/qc --filename multiqc_report.html {input}"
+
 rule generate_report:
     input:
         multiqc = "results/qc/multiqc_report.html",
@@ -212,4 +236,4 @@ rule generate_report:
     output:
         "results/report.html"
     script:
-        "scripts/generate_report.Rmd"
+        "scripts/generate_report.py"

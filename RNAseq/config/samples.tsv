@@ -1,7 +1,7 @@
-sample	condition	group	batch
-sample1	control	control	batch1
-sample2	control	control	batch1
-sample3	control	control	batch1
-sample4	treatment	treatment	batch1
-sample5	treatment	treatment	batch1
-sample6	treatment	treatment	batch1
+sample	condition	group	batch	fastq1	fastq2
+sample1	control	control	batch1	data/raw/sample1_R1.fastq.gz	data/raw/sample1_R2.fastq.gz
+sample2	control	control	batch1	data/raw/sample2_R1.fastq.gz	data/raw/sample2_R2.fastq.gz
+sample3	control	control	batch1	data/raw/sample3_R1.fastq.gz	data/raw/sample3_R2.fastq.gz
+sample4	treatment	treatment	batch1	data/raw/sample4_R1.fastq.gz	data/raw/sample4_R2.fastq.gz
+sample5	treatment	treatment	batch1	data/raw/sample5_R1.fastq.gz	data/raw/sample5_R2.fastq.gz
+sample6	treatment	treatment	batch1	data/raw/sample6_R1.fastq.gz	data/raw/sample6_R2.fastq.gz

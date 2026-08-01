@@ -3,6 +3,7 @@
 
 import pandas as pd
 import numpy as np
+import os
 
 def load_featurecounts_output(filepath):
     """加载featureCounts输出并清理"""
@@ -17,7 +18,7 @@ def load_featurecounts_output(filepath):
     counts_cols = [col for col in df.columns if col.endswith('.bam')]
     
     # 简化列名（去掉路径和.bam扩展名）
-    sample_names = [col.split('/')[-1].replace('.bam', '') for col in counts_cols]
+    sample_names = [os.path.basename(col).replace('.sorted.bam', '') for col in counts_cols]
     df_counts = df[['gene_id', 'gene_name'] + counts_cols].copy()
     df_counts.columns = ['gene_id', 'gene_name'] + sample_names
     

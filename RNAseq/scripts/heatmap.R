@@ -7,6 +7,8 @@ library(tidyverse)
 # 读取数据
 norm_counts <- read_csv(snakemake@input[["norm_counts"]])
 de_results <- read_csv(snakemake@input[["de_results"]])
+samples_df <- read_tsv(snakemake@input[["samples_tsv"]]) %>%
+  column_to_rownames("sample")
 
 # 获取显著差异基因
 sig_genes <- de_results %>%
@@ -15,6 +17,10 @@ sig_genes <- de_results %>%
   head(50)  # Top 50显著基因
 
 # 提取这些基因的表达量
+if (nrow(sig_genes) == 0) {
+  sig_genes <- tibble(gene_id = head(norm_counts$gene_id, 50))
+}
+
 expression_matrix <- norm_counts %>%
   filter(gene_id %in% sig_genes$gene_id) %>%
   column_to_rownames("gene_id") %>%
@@ -22,16 +28,20 @@ expression_matrix <- norm_counts %>%
 
 # 标准化表达量（z-score）
 expression_matrix_scaled <- t(scale(t(expression_matrix)))
+expression_matrix_scaled[is.na(expression_matrix_scaled)] <- 0
 
 # 准备样本注释
 sample_annotation <- data.frame(
-  row.names = colnames(expression_matrix),
-  Condition = sub("_.*", "", colnames(expression_matrix))
+  Condition = samples_df[colnames(expression_matrix), "condition", drop = TRUE],
+  row.names = colnames(expression_matrix)
 )
 
 # 颜色设置
 annotation_colors <- list(
-  Condition = c("control" = "blue", "treatment" = "red")
+  Condition = setNames(
+    grDevices::hcl.colors(length(unique(sample_annotation$Condition))),
+    unique(sample_annotation$Condition)
+  )
 )
 
 # 绘制热图
